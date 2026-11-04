@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "appId": null,
+  "appDisplayName": "IT Service Operations Workbench",
+  "region": "prod",
+  "environmentId": "beebc205-74e3-ec54-ba7f-528ddc96de94",
+  "description": " ",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {},
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "workorder": {
+          "entitySetName": "cr590_workorders",
+          "logicalName": "cr590_workorder",
+          "isHidden": false
+        },
+        "assignment": {
+          "entitySetName": "cr590_assignments",
+          "logicalName": "cr590_assignment",
+          "isHidden": false
+        },
+        "workorderhistory": {
+          "entitySetName": "cr590_tables",
+          "logicalName": "cr590_table",
+          "isHidden": false
+        },
+        "department": {
+          "entitySetName": "cr590_table1s",
+          "logicalName": "cr590_table1",
+          "isHidden": false
+        },
+        "employee": {
+          "entitySetName": "cr590_table2s",
+          "logicalName": "cr590_table2",
+          "isHidden": false
+        },
+        "servicecategory": {
+          "entitySetName": "cr590_servicecategories",
+          "logicalName": "cr590_servicecategory",
+          "isHidden": false
+        }
+      },
+      "environmentVariableName": ""
+    }
+  }
+}

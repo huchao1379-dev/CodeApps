@@ -1,0 +1,537 @@
+{
+  "name": "cr590_assignment",
+  "title": "Assignment",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "x-ms-dataverse-entity": true,
+      "x-ms-dataverse-entityset": "cr590_assignments",
+      "x-ms-dataverse-primary-id": "cr590_assignmentid",
+      "x-ms-dataverse-primary-name": "cr590_assignmentname",
+      "properties": {
+        "cr590_assignedat": {
+          "type": "string",
+          "title": "AssignedAt",
+          "x-ms-dataverse-attribute": "cr590_assignedat",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "cr590_AssignedAt"
+        },
+        "cr590_assignedfrom": {
+          "type": "string",
+          "title": "AssignedFrom",
+          "x-ms-dataverse-attribute": "cr590_assignedfrom",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "cr590_AssignedFrom",
+          "x-ms-dataverse-navigation-properties": [
+            "cr590_AssignedFrom"
+          ]
+        },
+        "cr590_assignedfromname": {
+          "type": "string",
+          "title": "cr590_assignedfromname",
+          "x-ms-dataverse-attribute": "cr590_assignedfromname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr590_AssignedFromName",
+          "x-ms-dataverse-attribute-of": "cr590_assignedfrom",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "cr590_assignedto": {
+          "type": "string",
+          "title": "AssignedTo",
+          "x-ms-dataverse-attribute": "cr590_assignedto",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "cr590_AssignedTo",
+          "x-ms-dataverse-navigation-properties": [
+            "cr590_AssignedTo"
+          ]
+        },
+        "cr590_assignedtoname": {
+          "type": "string",
+          "title": "cr590_assignedtoname",
+          "x-ms-dataverse-attribute": "cr590_assignedtoname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr590_AssignedToName",
+          "x-ms-dataverse-attribute-of": "cr590_assignedto",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "cr590_assignmentid": {
+          "type": "string",
+          "title": "Assignment",
+          "x-ms-dataverse-attribute": "cr590_assignmentid",
+          "x-ms-dataverse-type": "UniqueidentifierType",
+          "x-ms-schema-name": "cr590_AssignmentId",
+          "x-ms-dataverse-primary-id": true,
+          "required": true,
+          "x-ms-keyType": "primary"
+        },
+        "cr590_assignmentname": {
+          "type": "string",
+          "title": "AssignmentName",
+          "x-ms-dataverse-attribute": "cr590_assignmentname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr590_AssignmentName",
+          "x-ms-dataverse-primary-name": true,
+          "maxLength": 850
+        },
+        "cr590_assignmentnote": {
+          "type": "string",
+          "title": "AssignmentNote",
+          "x-ms-dataverse-attribute": "cr590_assignmentnote",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr590_AssignmentNote",
+          "maxLength": 100
+        },
+        "cr590_assignmentnumber": {
+          "type": "string",
+          "title": "AssignmentNumber",
+          "x-ms-dataverse-attribute": "cr590_assignmentnumber",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr590_AssignmentNumber",
+          "maxLength": 100
+        },
+        "cr590_assignmentsource": {
+          "type": "string",
+          "title": "AssignmentSource",
+          "x-ms-dataverse-attribute": "cr590_assignmentsource",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "cr590_AssignmentSource",
+          "enum": [
+            "Manual",
+            "Automatic",
+            "Bulk Operation",
+            "System Process"
+          ],
+          "x-ms-enum-values": [
+            326990000,
+            326990001,
+            326990002,
+            326990003
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "abfbf5dc-1cd8-f111-84e8-000d3a815930",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "AssignmentSource",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "cr590_assignmentsourcename": {
+          "type": "string",
+          "title": "cr590_assignmentsourcename",
+          "x-ms-dataverse-attribute": "cr590_assignmentsourcename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "cr590_assignmentsourceName",
+          "x-ms-dataverse-attribute-of": "cr590_assignmentsource",
+          "x-ms-read-only": true
+        },
+        "cr590_assignmenttype": {
+          "type": "string",
+          "title": "AssignmentType",
+          "x-ms-dataverse-attribute": "cr590_assignmenttype",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "cr590_AssignmentType",
+          "enum": [
+            "Initial Assignment",
+            "Reassignment",
+            "Unassignment",
+            "Reassignment Back"
+          ],
+          "x-ms-enum-values": [
+            326990000,
+            326990001,
+            326990002,
+            326990003
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "8068f52c-1dd8-f111-84e8-000d3a815930",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "AssignmentType",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "cr590_assignmenttypename": {
+          "type": "string",
+          "title": "cr590_assignmenttypename",
+          "x-ms-dataverse-attribute": "cr590_assignmenttypename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "cr590_assignmenttypeName",
+          "x-ms-dataverse-attribute-of": "cr590_assignmenttype",
+          "x-ms-read-only": true
+        },
+        "cr590_workorder": {
+          "type": "string",
+          "title": "WorkOrder",
+          "x-ms-dataverse-attribute": "cr590_workorder",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "cr590_WorkOrder",
+          "x-ms-dataverse-navigation-properties": [
+            "cr590_WorkOrder"
+          ],
+          "required": true
+        },
+        "cr590_workordername": {
+          "type": "string",
+          "title": "cr590_workordername",
+          "x-ms-dataverse-attribute": "cr590_workordername",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr590_WorkOrderName",
+          "x-ms-dataverse-attribute-of": "cr590_workorder",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "createdby": {
+          "type": "string",
+          "title": "创建者",
+          "x-ms-dataverse-attribute": "createdby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "CreatedBy",
+          "x-ms-dataverse-navigation-properties": [
+            "createdby"
+          ],
+          "x-ms-read-only": true
+        },
+        "createdbyname": {
+          "type": "string",
+          "title": "createdbyname",
+          "x-ms-dataverse-attribute": "createdbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedByName",
+          "x-ms-dataverse-attribute-of": "createdby",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "createdbyyominame": {
+          "type": "string",
+          "title": "createdbyyominame",
+          "x-ms-dataverse-attribute": "createdbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedByYomiName",
+          "x-ms-dataverse-attribute-of": "createdby",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "createdon": {
+          "type": "string",
+          "title": "创建时间",
+          "x-ms-dataverse-attribute": "createdon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "CreatedOn",
+          "x-ms-read-only": true
+        },
+        "createdonbehalfby": {
+          "type": "string",
+          "title": "创建者(代理)",
+          "x-ms-dataverse-attribute": "createdonbehalfby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "CreatedOnBehalfBy",
+          "x-ms-dataverse-navigation-properties": [
+            "createdonbehalfby"
+          ],
+          "x-ms-read-only": true
+        },
+        "createdonbehalfbyname": {
+          "type": "string",
+          "title": "createdonbehalfbyname",
+          "x-ms-dataverse-attribute": "createdonbehalfbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedOnBehalfByName",
+          "x-ms-dataverse-attribute-of": "createdonbehalfby",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "createdonbehalfbyyominame": {
+          "type": "string",
+          "title": "createdonbehalfbyyominame",
+          "x-ms-dataverse-attribute": "createdonbehalfbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedOnBehalfByYomiName",
+          "x-ms-dataverse-attribute-of": "createdonbehalfby",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "importsequencenumber": {
+          "type": "string",
+          "title": "导入序列号",
+          "x-ms-dataverse-attribute": "importsequencenumber",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "ImportSequenceNumber"
+        },
+        "modifiedby": {
+          "type": "string",
+          "title": "修改者",
+          "x-ms-dataverse-attribute": "modifiedby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ModifiedBy",
+          "x-ms-dataverse-navigation-properties": [
+            "modifiedby"
+          ],
+          "x-ms-read-only": true
+        },
+        "modifiedbyname": {
+          "type": "string",
+          "title": "modifiedbyname",
+          "x-ms-dataverse-attribute": "modifiedbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedByName",
+          "x-ms-dataverse-attribute-of": "modifiedby",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "modifiedbyyominame": {
+          "type": "string",
+          "title": "modifiedbyyominame",
+          "x-ms-dataverse-attribute": "modifiedbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedByYomiName",
+          "x-ms-dataverse-attribute-of": "modifiedby",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "modifiedon": {
+          "type": "string",
+          "title": "修改时间",
+          "x-ms-dataverse-attribute": "modifiedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "ModifiedOn",
+          "x-ms-read-only": true
+        },
+        "modifiedonbehalfby": {
+          "type": "string",
+          "title": "修改者(代理)",
+          "x-ms-dataverse-attribute": "modifiedonbehalfby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ModifiedOnBehalfBy",
+          "x-ms-dataverse-navigation-properties": [
+            "modifiedonbehalfby"
+          ],
+          "x-ms-read-only": true
+        },
+        "modifiedonbehalfbyname": {
+          "type": "string",
+          "title": "modifiedonbehalfbyname",
+          "x-ms-dataverse-attribute": "modifiedonbehalfbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedOnBehalfByName",
+          "x-ms-dataverse-attribute-of": "modifiedonbehalfby",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "modifiedonbehalfbyyominame": {
+          "type": "string",
+          "title": "modifiedonbehalfbyyominame",
+          "x-ms-dataverse-attribute": "modifiedonbehalfbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedOnBehalfByYomiName",
+          "x-ms-dataverse-attribute-of": "modifiedonbehalfby",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "overriddencreatedon": {
+          "type": "string",
+          "title": "创建记录的时间",
+          "x-ms-dataverse-attribute": "overriddencreatedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "OverriddenCreatedOn"
+        },
+        "ownerid": {
+          "type": "string",
+          "title": "负责人",
+          "x-ms-dataverse-attribute": "ownerid",
+          "x-ms-dataverse-type": "OwnerType",
+          "x-ms-schema-name": "OwnerId",
+          "required": true
+        },
+        "owneridname": {
+          "type": "string",
+          "title": "owneridname",
+          "x-ms-dataverse-attribute": "owneridname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwnerIdName",
+          "x-ms-dataverse-attribute-of": "ownerid",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owneridtype": {
+          "type": "string",
+          "title": "owneridtype",
+          "x-ms-dataverse-attribute": "owneridtype",
+          "x-ms-dataverse-type": "EntityNameType",
+          "x-ms-schema-name": "OwnerIdType",
+          "x-ms-dataverse-attribute-of": "ownerid",
+          "required": true
+        },
+        "owneridyominame": {
+          "type": "string",
+          "title": "owneridyominame",
+          "x-ms-dataverse-attribute": "owneridyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwnerIdYomiName",
+          "x-ms-dataverse-attribute-of": "ownerid",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owningbusinessunit": {
+          "type": "string",
+          "title": "负责的业务部门",
+          "x-ms-dataverse-attribute": "owningbusinessunit",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningBusinessUnit",
+          "x-ms-dataverse-navigation-properties": [
+            "owningbusinessunit"
+          ],
+          "x-ms-read-only": true
+        },
+        "owningbusinessunitname": {
+          "type": "string",
+          "title": "owningbusinessunitname",
+          "x-ms-dataverse-attribute": "owningbusinessunitname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwningBusinessUnitName",
+          "x-ms-dataverse-attribute-of": "owningbusinessunit",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owningteam": {
+          "type": "string",
+          "title": "负责团队",
+          "x-ms-dataverse-attribute": "owningteam",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningTeam",
+          "x-ms-dataverse-navigation-properties": [
+            "owningteam"
+          ],
+          "x-ms-read-only": true
+        },
+        "owninguser": {
+          "type": "string",
+          "title": "负责人用户",
+          "x-ms-dataverse-attribute": "owninguser",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningUser",
+          "x-ms-dataverse-navigation-properties": [
+            "owninguser"
+          ],
+          "x-ms-read-only": true
+        },
+        "statecode": {
+          "type": "string",
+          "title": "状态",
+          "x-ms-dataverse-attribute": "statecode",
+          "x-ms-dataverse-type": "StateType",
+          "x-ms-schema-name": "statecode",
+          "required": true,
+          "enum": [
+            "可用",
+            "停用"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "decffa73-5f4e-4b49-af24-d0c3a17f191d",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "状态",
+          "x-ms-optionSetType": "State"
+        },
+        "statecodename": {
+          "type": "string",
+          "title": "statecodename",
+          "x-ms-dataverse-attribute": "statecodename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "statecodeName",
+          "x-ms-dataverse-attribute-of": "statecode",
+          "x-ms-read-only": true
+        },
+        "statuscode": {
+          "type": "string",
+          "title": "状态描述",
+          "x-ms-dataverse-attribute": "statuscode",
+          "x-ms-dataverse-type": "StatusType",
+          "x-ms-schema-name": "statuscode",
+          "enum": [
+            "可用",
+            "停用"
+          ],
+          "x-ms-enum-values": [
+            1,
+            2
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "5af4b18b-6cb3-4132-bc67-ad493b5612ea",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "状态描述",
+          "x-ms-optionSetType": "Status"
+        },
+        "statuscodename": {
+          "type": "string",
+          "title": "statuscodename",
+          "x-ms-dataverse-attribute": "statuscodename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "statuscodeName",
+          "x-ms-dataverse-attribute-of": "statuscode",
+          "x-ms-read-only": true
+        },
+        "timezoneruleversionnumber": {
+          "type": "string",
+          "title": "时区规则版本号",
+          "x-ms-dataverse-attribute": "timezoneruleversionnumber",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "TimeZoneRuleVersionNumber"
+        },
+        "utcconversiontimezonecode": {
+          "type": "string",
+          "title": "UTC 转换时区代码",
+          "x-ms-dataverse-attribute": "utcconversiontimezonecode",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "UTCConversionTimeZoneCode"
+        },
+        "versionnumber": {
+          "type": "string",
+          "title": "版本号",
+          "x-ms-dataverse-attribute": "versionnumber",
+          "x-ms-dataverse-type": "BigIntType",
+          "x-ms-schema-name": "VersionNumber",
+          "x-ms-read-only": true
+        }
+      },
+      "required": [
+        "cr590_assignmentid",
+        "cr590_workorder",
+        "createdbyyominame",
+        "createdonbehalfbyyominame",
+        "modifiedbyyominame",
+        "modifiedonbehalfbyyominame",
+        "ownerid",
+        "owneridname",
+        "owneridtype",
+        "owneridyominame",
+        "owningbusinessunitname",
+        "statecode"
+      ]
+    }
+  }
+}
