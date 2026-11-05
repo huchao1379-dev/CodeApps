@@ -288,6 +288,7 @@ function mapEmployee(record: EmployeeRecord): EmployeeOption {
     department: formattedValue(record, '_cr590_department_value@OData.Community.Display.V1.FormattedValue'),
     gender: formattedValue(record, 'cr590_gender@OData.Community.Display.V1.FormattedValue')
       ?? choiceLabel(Cr590_table2scr590_gender, record.cr590_gender),
+    genderValue: record.cr590_gender ?? null,
     age: record.cr590_age ?? null,
     hireDate: record.cr590_hiredate ?? null,
     isActive: record.cr590_isactive === true && record.statecode === 0,

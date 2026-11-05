@@ -10,7 +10,7 @@ import {
   type WorkOrderStatus,
   type WorkOrderStoreState,
 } from '../types/workOrder.types'
-import { allowedTransitions } from '../config/workOrderChoices'
+import { getStatusTransitionBlocker } from '../config/workOrderChoices'
 
 const STORAGE_KEY = 'operations-workbench.work-orders.demo.v1'
 
@@ -242,18 +242,8 @@ export function transitionWorkOrder(
 ): WorkOrderStoreState {
   const current = state.workOrders.find((workOrder) => workOrder.id === workOrderId)
   if (!current) throw new Error('找不到这条工单。')
-  if (!allowedTransitions[current.status]?.includes(nextStatus)) {
-    throw new Error(`不允许从“${STATUS_LABELS[current.status]}”流转到“${STATUS_LABELS[nextStatus]}”。`)
-  }
-  if (nextStatus === WORK_ORDER_STATUS.inProgress && !current.assignedToId) {
-    throw new Error('请先派发工单，再开始处理。')
-  }
-  if (nextStatus === WORK_ORDER_STATUS.resolved && !note.trim()) {
-    throw new Error('请填写解决方案后再标记为已解决。')
-  }
-  if (nextStatus === WORK_ORDER_STATUS.cancelled && !note.trim()) {
-    throw new Error('请填写取消原因。')
-  }
+  const blocker = getStatusTransitionBlocker(current, nextStatus, note)
+  if (blocker) throw new Error(blocker)
 
   const occurredAt = new Date().toISOString()
   const isReopened = current.status === WORK_ORDER_STATUS.resolved && nextStatus === WORK_ORDER_STATUS.inProgress

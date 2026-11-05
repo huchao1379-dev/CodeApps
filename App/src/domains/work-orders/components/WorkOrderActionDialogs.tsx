@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { priorityOptions, workOrderStatusOptions, allowedTransitions } from '../config/workOrderChoices'
+import { priorityOptions, workOrderStatusOptions, getAvailableStatusTransitions, isStatusTransitionDefined } from '../config/workOrderChoices'
+import { useOverlayFocus } from '../../../shared/components/overlays/useOverlayFocus'
 import {
   PRIORITY,
   STATUS_LABELS,
@@ -27,12 +28,13 @@ function ModalShell({ title, subtitle, onClose, children }: {
   onClose: () => void
   children: ReactNode
 }) {
+  const dialogRef = useOverlayFocus<HTMLElement>(true, onClose)
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
     if (event.target === event.currentTarget) onClose()
   }}>
-    <section className="modal-card" role="dialog" aria-modal="true" aria-label={title}>
+    <section ref={dialogRef} tabIndex={-1} className="modal-card" role="dialog" aria-modal="true" aria-label={title}>
       <header className="modal-header"><div><h2>{title}</h2><p>{subtitle}</p></div>
-        <button className="icon-button" type="button" aria-label="关闭" onClick={onClose}>×</button>
+        <button data-overlay-initial-focus className="icon-button" type="button" aria-label="关闭" onClick={onClose}>×</button>
       </header>
       {children}
     </section>
@@ -272,14 +274,15 @@ export function StatusDialog({
 }) {
   const [statusValue, setStatusValue] = useState('')
   const [note, setNote] = useState('')
+  const options = useMemo(() => workOrder ? getAvailableStatusTransitions(workOrder) : [], [workOrder])
+  const resumeRequiresAssignee = Boolean(workOrder && !workOrder.assignedToId
+    && isStatusTransitionDefined(workOrder.status, WORK_ORDER_STATUS.inProgress))
   useEffect(() => {
     if (open && workOrder) {
-      const options = allowedTransitions[workOrder.status]
-        .filter((value) => value !== WORK_ORDER_STATUS.new && value !== WORK_ORDER_STATUS.assigned)
       setStatusValue(String(options[0] ?? ''))
       setNote('')
     }
-  }, [open, workOrder])
+  }, [open, workOrder, options])
   if (!open || !workOrder) return null
 
   const nextStatus = Number(statusValue) as WorkOrderStatus
@@ -288,23 +291,24 @@ export function StatusDialog({
     : nextStatus === WORK_ORDER_STATUS.onHold ? '暂停原因'
       : nextStatus === WORK_ORDER_STATUS.cancelled ? '取消原因'
         : '处理说明'
-  const options = allowedTransitions[workOrder.status]
-    .filter((value) => value !== WORK_ORDER_STATUS.new && value !== WORK_ORDER_STATUS.assigned)
   const selectedLabel = workOrderStatusOptions.find((item) => item.value === nextStatus)?.label ?? STATUS_LABELS[nextStatus]
 
   return <ModalShell title="更新工单状态" subtitle={`${workOrder.workOrderNumber} · ${STATUS_LABELS[workOrder.status]}`} onClose={onClose}>
     <form className="form-stack" onSubmit={(event) => { event.preventDefault(); onSubmit(nextStatus, note.trim()) }}>
       <div className="modal-content">
-        <label>新状态<b>*</b><select required value={statusValue} onChange={(event) => setStatusValue(event.target.value)}>
-          {options.map((value) => <option key={value} value={value}>{STATUS_LABELS[value]}</option>)}
-        </select></label>
-        <label>{label}{needsNote && <b>*</b>}<input type="text" maxLength={100} required={needsNote} value={note}
-          onChange={(event) => setNote(event.target.value)} /></label>
-        {nextStatus === WORK_ORDER_STATUS.closed && !workOrder.resolution && <p className="form-error">关闭前需要先记录解决方案。</p>}
+        {options.length > 0
+          ? <label>新状态<b>*</b><select required value={statusValue} onChange={(event) => setStatusValue(event.target.value)}>
+            {options.map((value) => <option key={value} value={value}>{STATUS_LABELS[value]}</option>)}
+          </select></label>
+          : <p className="form-error" role="status">当前工单没有可执行的目标状态。</p>}
+        {resumeRequiresAssignee && <p className="bulk-warning" role="status">重新开始处理前，需要先为该工单指定负责人。</p>}
+        {options.length > 0 && <label>{label}{needsNote && <b>*</b>}<input type="text" maxLength={100} required={needsNote} value={note}
+          onChange={(event) => setNote(event.target.value)} /></label>}
+        {nextStatus === WORK_ORDER_STATUS.closed && !workOrder.resolution?.trim() && <p className="form-error">关闭前需要先记录解决方案。</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
       </div>
       <footer className="modal-footer"><button className="button button-quiet" type="button" onClick={onClose} disabled={busy}>取消</button>
-        <button className="button button-primary" type="submit" disabled={busy || options.length === 0 || (nextStatus === WORK_ORDER_STATUS.closed && !workOrder.resolution)}>
+        <button className="button button-primary" type="submit" disabled={busy || options.length === 0 || (nextStatus === WORK_ORDER_STATUS.closed && !workOrder.resolution?.trim())}>
           {busy ? '提交中…' : `更新为${selectedLabel}`}
         </button>
       </footer>

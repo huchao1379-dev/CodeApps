@@ -1,3 +1,5 @@
+@import './styles/tokens.css';
+
 :root {
   font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", Inter, sans-serif;
   font-size: 16px;

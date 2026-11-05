@@ -1,0 +1,79 @@
+.wb-layout { min-height: 100vh; color: var(--color-text-primary); background: var(--color-page-background); }
+.wb-main { display: flex; min-height: 100vh; flex-direction: column; margin-left: 264px; }
+.wb-main-content { min-width: 0; flex: 1; }
+.wb-sidebar { position: fixed; z-index: 10; inset: 0 auto 0 0; display: flex; width: 264px; flex-direction: column; padding: 24px 16px 18px; color: #c6cedb; background: #111a2c; transition: width .16s ease; }
+.wb-sidebar-brand { padding: 0 8px 23px; }
+.wb-sidebar-brand .brand-lockup { padding: 0; }
+.wb-sidebar-workspace { margin-bottom: 10px; }
+.wb-sidebar-nav { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 18px; overflow-y: auto; padding-top: 14px; }
+.wb-nav-group { display: flex; flex-direction: column; gap: 4px; }
+.wb-nav-caption { margin: 0 10px 5px; color: #8290a5; font-size: 10px; font-weight: 700; }
+.wb-nav-item { position: relative; display: flex; width: 100%; min-height: 42px; align-items: center; gap: 11px; padding: 0 12px; border: 0; border-radius: 7px; color: #b4bfce; background: transparent; text-align: left; font-size: 13px; }
+.wb-nav-item:hover { color: #fff; background: #1d2940; }
+.wb-nav-item:disabled { opacity: .5; cursor: not-allowed; }
+.wb-nav-active { color: #fff; background: #453b81; box-shadow: inset 2px 0 #aa97ff; }
+.wb-nav-parent-active:not(.wb-nav-active) { color: #f3f1ff; }
+.wb-nav-icon { display: grid; width: 20px; flex: 0 0 auto; place-items: center; color: #aab5c6; font-size: 16px; }
+.wb-nav-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-nav-badge { display: grid; min-width: 22px; height: 20px; flex: 0 0 auto; place-items: center; padding: 0 5px; border-radius: 5px; color: #e2dcff; background: #5a4d9a; font-size: 10px; }
+.wb-nav-children { display: flex; flex-direction: column; gap: 3px; }
+.wb-sidebar-footer { margin-top: auto; padding-top: 12px; }
+.wb-collapse-button { position: absolute; right: -13px; bottom: 22px; display: grid; width: 26px; height: 26px; place-items: center; border: 1px solid #dce2eb; border-radius: 50%; color: #586679; background: white; box-shadow: 0 2px 8px #17203318; font-size: 18px; }
+.wb-sidebar-collapsed { width: 76px; padding-right: 10px; padding-left: 10px; }
+.wb-layout-collapsed .wb-main { margin-left: 76px; }
+.wb-sidebar-collapsed .wb-sidebar-brand { display: flex; justify-content: center; padding-right: 0; padding-left: 0; }
+.wb-sidebar-collapsed .wb-nav-group { align-items: center; }
+.wb-sidebar-collapsed .wb-nav-item { justify-content: center; padding: 0; }
+.wb-sidebar-collapsed .wb-nav-label, .wb-sidebar-collapsed .wb-nav-badge { display: none; }
+.wb-sidebar-collapsed .wb-nav-children { display: none; }
+.wb-header { position: sticky; z-index: 8; top: 0; display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 16px; padding: 0 32px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+.wb-header-context, .wb-header-actions { display: flex; min-width: 0; align-items: center; gap: 14px; }
+.wb-header-title { margin: 0; color: var(--color-text-primary); font-size: 15px; font-weight: 600; }
+.wb-user-button { display: inline-flex; align-items: center; gap: 9px; padding: 4px 7px; border: 0; border-radius: 20px; color: var(--color-text-secondary); background: transparent; font: inherit; font-size: 12px; }
+.wb-user-button:not(:disabled):hover { background: var(--color-surface-muted); }
+.wb-user-button > span:first-child, .wb-user-button img { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; color: #59469d; background: #ece8fb; object-fit: cover; font-weight: 700; }
+.wb-page-container { width: 100%; margin: 0 auto; padding: 34px 36px 30px; }
+.wb-page-normal { max-width: 1200px; }
+.wb-page-wide { max-width: 1600px; }
+.wb-page-full { max-width: none; }
+.wb-page-header { display: flex; min-width: 0; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 26px; }
+.wb-page-heading { min-width: 0; }
+.wb-page-eyebrow { display: block; margin-bottom: 8px; color: var(--color-primary); font-size: 11px; font-weight: 700; }
+.wb-page-heading h1 { margin: 0; color: var(--color-text-primary); font-size: 28px; font-weight: 680; }
+.wb-page-heading p { margin: 7px 0 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.6; }
+.wb-page-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+.wb-page-content { min-width: 0; }
+
+@media (max-width: 1180px) {
+  .wb-main { margin-left: 232px; }
+  .wb-sidebar { width: 232px; }
+  .wb-layout-collapsed .wb-main { margin-left: 72px; }
+  .wb-sidebar-collapsed { width: 72px; }
+  .wb-page-container { padding-right: 26px; padding-left: 26px; }
+}
+
+@media (max-width: 760px) {
+  .wb-layout { min-height: 100vh; }
+  .wb-sidebar, .wb-sidebar-collapsed { position: relative; inset: auto; width: 100%; height: auto; min-height: 58px; flex-direction: row; align-items: center; padding: 8px 12px; }
+  .wb-sidebar-brand { padding: 0 8px; }
+  .wb-sidebar-brand .brand-lockup { padding: 0; }
+  .wb-sidebar-workspace, .wb-sidebar-footer, .wb-collapse-button, .wb-nav-caption { display: none; }
+  .wb-sidebar-nav { min-width: 0; flex-direction: row; justify-content: flex-end; gap: 4px; padding: 0; overflow-x: auto; }
+  .wb-nav-group { flex-direction: row; }
+  .wb-nav-item { width: auto; min-height: 38px; gap: 7px; padding: 0 9px; font-size: 11px; }
+  .wb-sidebar-collapsed .wb-nav-label { display: block; }
+  .wb-sidebar-collapsed .wb-nav-item { padding: 0 9px; }
+  .wb-main, .wb-layout-collapsed .wb-main { min-height: calc(100vh - 58px); margin-left: 0; }
+  .wb-main-content { flex: initial; }
+  .wb-header { min-height: 52px; padding: 0 15px; }
+  .wb-user-name { display: none; }
+  .wb-page-container { padding: 24px 15px 26px; }
+  .wb-page-header { align-items: flex-start; flex-direction: column; gap: 12px; margin-bottom: 21px; }
+  .wb-page-heading h1 { font-size: 24px; }
+}
+
+@media (max-width: 420px) {
+  .wb-sidebar, .wb-sidebar-collapsed { align-items: flex-start; flex-direction: column; }
+  .wb-sidebar-nav { width: 100%; justify-content: flex-start; }
+  .wb-page-container { padding-right: 12px; padding-left: 12px; }
+}

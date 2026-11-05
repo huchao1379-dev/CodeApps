@@ -14,7 +14,7 @@ import type {
   Cr590_tablescr590_status,
 } from '../../../generated/models/Cr590_tablesModel'
 import type { Cr590_workordersBase, Cr590_workorderscr590_status } from '../../../generated/models/Cr590_workordersModel'
-import { allowedTransitions } from '../config/workOrderChoices'
+import { getStatusTransitionBlocker } from '../config/workOrderChoices'
 import {
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -384,23 +384,8 @@ export async function transitionDataverseWorkOrder(
   nextStatus: WorkOrderStatus,
   note: string,
 ): Promise<void> {
-  if (nextStatus === WORK_ORDER_STATUS.new || nextStatus === WORK_ORDER_STATUS.assigned) {
-    throw new Error('待分派或已分派状态请通过撤派、派发或转派操作更新。')
-  }
-  if (!allowedTransitions[current.status]?.includes(nextStatus)) {
-    throw new Error(`不允许从“${STATUS_LABELS[current.status]}”流转到“${STATUS_LABELS[nextStatus]}”。`)
-  }
-  if (nextStatus === WORK_ORDER_STATUS.inProgress && !current.assignedToId) {
-    throw new Error('请先派发工单，再开始处理。')
-  }
-  if ((nextStatus === WORK_ORDER_STATUS.onHold || nextStatus === WORK_ORDER_STATUS.cancelled) && !note.trim()) {
-    throw new Error(nextStatus === WORK_ORDER_STATUS.onHold ? '请填写暂停原因。' : '请填写取消原因。')
-  }
-  if (nextStatus === WORK_ORDER_STATUS.resolved && !note.trim()) throw new Error('请填写解决方案。')
-  if (note.length > 100) throw new Error('操作说明不能超过 100 个字符。')
-  if (nextStatus === WORK_ORDER_STATUS.closed && !current.resolution?.trim()) {
-    throw new Error('请先记录解决方案，再关闭工单。')
-  }
+  const blocker = getStatusTransitionBlocker(current, nextStatus, note)
+  if (blocker) throw new Error(blocker)
 
   const occurredAt = new Date().toISOString()
   const patch: WorkOrderPatch = { cr590_status: nextStatus as Cr590_workorderscr590_status }

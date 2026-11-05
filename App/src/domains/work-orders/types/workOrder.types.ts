@@ -50,6 +50,7 @@ export interface EmployeeOption {
   departmentId?: string | null
   department?: string | null
   gender?: string | null
+  genderValue?: number | null
   age?: number | null
   hireDate?: string | null
   isActive: boolean
