@@ -72,6 +72,18 @@ type ServiceCategoryRecord = Cr590_servicecategories
   & FormattedLookup<'cr590_defaultdepartment'>
 
 const PAGE_SIZE = 500
+const WORK_ORDER_SELECT = [
+  'cr590_workorderid', 'cr590_workordernumber', 'cr590_workordername',
+  'cr590_issuedescription', 'cr590_priority', 'cr590_status',
+  '_cr590_assignedto_value', '_cr590_department_value', '_cr590_servicecategory_value',
+  'cr590_createtime', 'cr590_expectedcompletiontime', 'cr590_resolution',
+  'cr590_resolvedat', 'cr590_closedat', '_createdby_value', 'createdon', 'modifiedon',
+]
+const EMPLOYEE_SELECT = [
+  'cr590_table2id', 'cr590_employeename', 'cr590_email', '_cr590_department_value',
+  'cr590_gender', 'cr590_age', 'cr590_hiredate', 'cr590_isactive',
+  'cr590_isavailablefororder', 'cr590_maxtaskload', 'cr590_skills', 'statecode',
+]
 
 type DataverseErrorDetails = {
   message?: unknown
@@ -336,13 +348,7 @@ function mapServiceCategory(record: ServiceCategoryRecord): ServiceCategoryOptio
 /** Reads all six Dataverse tables; work orders are required, reference/history reads degrade independently. */
 export async function loadWorkOrderStateFromDataverse(): Promise<WorkOrderStoreState> {
   const workOrders = (await readAllSourceRows('cr590_workorders', (skipToken) => Cr590_workordersService.getAll({
-    select: [
-      'cr590_workorderid', 'cr590_workordernumber', 'cr590_workordername',
-      'cr590_issuedescription', 'cr590_priority', 'cr590_status',
-      '_cr590_assignedto_value', '_cr590_department_value', '_cr590_servicecategory_value',
-      'cr590_createtime', 'cr590_expectedcompletiontime', 'cr590_resolution',
-      'cr590_resolvedat', 'cr590_closedat', '_createdby_value', 'createdon', 'modifiedon',
-    ],
+    select: WORK_ORDER_SELECT,
     orderBy: ['cr590_createtime desc'],
     maxPageSize: PAGE_SIZE,
     ...(skipToken ? { skipToken } : {}),
@@ -370,12 +376,7 @@ export async function loadWorkOrderStateFromDataverse(): Promise<WorkOrderStoreS
       ...(skipToken ? { skipToken } : {}),
     }))).map((record) => mapHistory(record as HistoryRecord)), [], warnings),
     readOptionalSource('cr590_table2s', async () => (await readAllSourceRows('cr590_table2s', (skipToken) => Cr590_table2sService.getAll({
-      select: [
-        'cr590_table2id', 'cr590_employeename', 'cr590_email', '_cr590_department_value',
-        'cr590_gender', 'cr590_age', 'cr590_hiredate', 'cr590_isactive',
-        'cr590_isavailablefororder', 'cr590_maxtaskload', 'cr590_skills',
-        'statecode',
-      ],
+      select: EMPLOYEE_SELECT,
       orderBy: ['cr590_employeename asc'], maxPageSize: PAGE_SIZE,
       ...(skipToken ? { skipToken } : {}),
     }))).map((record) => mapEmployee(record as EmployeeRecord)), [], warnings),
@@ -409,4 +410,67 @@ export async function loadWorkOrderStateFromDataverse(): Promise<WorkOrderStoreS
     serviceCategories: serviceCategoryRows,
     readWarnings: warnings,
   }
+}
+
+export interface WorkOrderAssignmentSnapshot {
+  workOrder: WorkOrder
+  employee: EmployeeOption
+  currentLoad: number
+}
+
+function normalizeRecordId(id: string, label: string): string {
+  const normalized = id.replace(/[{}]/g, '')
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized)) {
+    throw new Error(`${label}标识无效，请刷新后重试。`)
+  }
+  return normalized
+}
+
+/** Reads only the target order, employee, and that employee's active workload before assignment. */
+export async function loadWorkOrderAssignmentSnapshot(
+  workOrderId: string,
+  employeeId: string,
+): Promise<WorkOrderAssignmentSnapshot> {
+  const normalizedWorkOrderId = normalizeRecordId(workOrderId, '工单')
+  const normalizedEmployeeId = normalizeRecordId(employeeId, '员工')
+
+  let orderResult: IOperationResult<Cr590_workorders>
+  let employeeResult: IOperationResult<Cr590_table2s>
+  try {
+    [orderResult, employeeResult] = await Promise.all([
+      Cr590_workordersService.get(normalizedWorkOrderId, { select: WORK_ORDER_SELECT }),
+      Cr590_table2sService.get(normalizedEmployeeId, { select: EMPLOYEE_SELECT }),
+    ])
+  } catch (error) {
+    throw toDataverseError('派单目标记录', error)
+  }
+
+  const orderRecord = unwrap(orderResult, 'cr590_workorders') as WorkOrderRecord
+  const employeeRecord = unwrap(employeeResult, 'cr590_table2s') as EmployeeRecord
+  if (!orderRecord.cr590_workorderid) throw new Error('工单已不存在或当前身份无权读取。')
+  if (!employeeRecord.cr590_table2id) throw new Error('目标员工已不存在或当前身份无权读取。')
+
+  const workOrder = mapWorkOrder(orderRecord)
+  const employee = mapEmployee(employeeRecord)
+  const activeStatusFilter = `(_cr590_assignedto_value eq ${normalizedEmployeeId}) and (statecode eq 0) and (cr590_status eq ${WORK_ORDER_STATUS.assigned} or cr590_status eq ${WORK_ORDER_STATUS.inProgress} or cr590_status eq ${WORK_ORDER_STATUS.onHold})`
+  const top = employee.maxTaskLoad == null ? 1 : Math.min(Math.max(1, employee.maxTaskLoad + 1), 5000)
+  let workloadResult: IOperationResult<Cr590_workorders[]>
+  try {
+    workloadResult = await Cr590_workordersService.getAll({
+      select: ['cr590_workorderid'],
+      filter: activeStatusFilter,
+      top,
+      maxPageSize: Math.min(top, PAGE_SIZE),
+      count: true,
+    })
+  } catch (error) {
+    throw toDataverseError('工程师当前工作负载', error)
+  }
+  const workloadRows = unwrap(workloadResult, 'cr590_workorders')
+  const currentLoad = workloadResult.count ?? workloadRows.length
+  if (employee.maxTaskLoad != null && employee.maxTaskLoad > 5000 && currentLoad >= 5000) {
+    throw new Error('该员工工作负载超过 Dataverse 单次计数上限，无法可靠校验容量；请联系管理员检查负载配置。')
+  }
+
+  return { workOrder, employee, currentLoad }
 }

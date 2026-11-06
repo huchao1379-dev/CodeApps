@@ -11,10 +11,13 @@ import {
   type WorkOrderStatus,
   type WorkOrderStoreState,
 } from '../types/workOrder.types'
-import { loadWorkOrderStateFromDataverse } from '../services/dataverseWorkOrderRepository'
+import { loadWorkOrderAssignmentSnapshot, loadWorkOrderStateFromDataverse } from '../services/dataverseWorkOrderRepository'
+import { loadAssignmentApprovalRequests, type AssignmentApprovalRequest } from '../services/assignmentApprovalRepository'
+import { submitAssignmentApprovalRequest } from '../../../integrations/power-automate/assignmentApprovalAdapter'
 import {
   assignDataverseWorkOrder,
   createDataverseWorkOrder,
+  PartialWorkOrderWriteError,
   transitionDataverseWorkOrder,
   unassignDataverseWorkOrder,
   updateDataverseWorkOrder,
@@ -131,6 +134,19 @@ function PriorityLabel({ priority }: { priority: Priority }) {
   return <span className={`priority-label priority-${priorityClass[priority]}`}><i />{PRIORITY_LABELS[priority]}</span>
 }
 
+function RelatedMaterialsSection() {
+  return <section className="detail-section related-materials" aria-labelledby="related-materials-title">
+    <div className="section-heading"><h3 id="related-materials-title">相关资料</h3><span>SHAREPOINT</span></div>
+    <div className="sharepoint-connection-state" role="status">
+      <span className="sharepoint-mark" aria-hidden="true">S</span>
+      <div>
+        <strong>SharePoint 资料库尚未连接</strong>
+        <p>将 SharePoint 文档库添加为此 Code App 的数据源后，这里可以按工单编号和服务类别显示 SOP、排障文档与附件。</p>
+      </div>
+    </div>
+  </section>
+}
+
 function Avatar({ name, small = false }: { name: string | null; small?: boolean }) {
   if (!name) return <span className={`avatar avatar-empty${small ? ' avatar-small' : ''}`}>待</span>
   return <span className={`avatar${small ? ' avatar-small' : ''}`}>{name.slice(-1)}</span>
@@ -163,10 +179,26 @@ function WorkOrderDetail({
   onUnassign: () => void
   onChangeStatus: () => void
 }) {
+  const [approvalRequests, setApprovalRequests] = useState<AssignmentApprovalRequest[]>([])
+  const [approvalRequestsLoading, setApprovalRequestsLoading] = useState(false)
+  const [approvalRequestsError, setApprovalRequestsError] = useState<string | null>(null)
   const timeline = (state.events ?? []).filter((event) => event.workOrderId === workOrder.id)
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
   const assignments = (state.assignments ?? []).filter((assignment) => assignment.workOrderId === workOrder.id)
     .sort((a, b) => b.assignedAt.localeCompare(a.assignedAt))
+
+  useEffect(() => {
+    let active = true
+    setApprovalRequestsLoading(true)
+    setApprovalRequestsError(null)
+    loadAssignmentApprovalRequests(workOrder.id)
+      .then((requests) => { if (active) setApprovalRequests(requests) })
+      .catch((error: unknown) => {
+        if (active) setApprovalRequestsError(error instanceof Error ? error.message : '读取审批申请失败。')
+      })
+      .finally(() => { if (active) setApprovalRequestsLoading(false) })
+    return () => { active = false }
+  }, [workOrder.id])
   const terminal = workOrder.status === WORK_ORDER_STATUS.closed || workOrder.status === WORK_ORDER_STATUS.cancelled
   const canAssign = ([WORK_ORDER_STATUS.new, WORK_ORDER_STATUS.assigned, WORK_ORDER_STATUS.inProgress, WORK_ORDER_STATUS.onHold] as readonly WorkOrderStatus[]).includes(workOrder.status)
   const canUnassign = workOrder.status === WORK_ORDER_STATUS.assigned && Boolean(workOrder.assignedToId)
@@ -207,6 +239,8 @@ function WorkOrderDetail({
           <p className="resolution-card">{workOrder.resolution || '尚未记录解决方案'}</p>
         </section>
 
+        <RelatedMaterialsSection />
+
         <section className="detail-section"><div className="section-heading"><h3>派发记录</h3><span>{assignments.length} RECORDS</span></div>
           {assignments.length > 0 ? <div className="assignment-list">{assignments.map((assignment) => <article className="assignment-row" key={assignment.id}>
             <span className="assignment-mark">↗</span><div><strong>{assignment.assignmentTypeLabel ?? assignment.assignmentType}</strong>
@@ -214,6 +248,23 @@ function WorkOrderDetail({
               <small>{assignment.assignmentNumber || '派发编号待生成'} · {assignment.assignmentSourceLabel ?? assignment.assignmentSource ?? '—'} · 操作人：{assignment.createdBy ?? '—'}</small>
             </div><time>{formatDate(assignment.assignedAt)}</time>
           </article>)}</div> : <p className="empty-history">暂无派发记录</p>}
+        </section>
+
+        <section className="detail-section"><div className="section-heading"><h3>负责人变更审批</h3><span>{approvalRequests.length} REQUESTS</span></div>
+          {approvalRequestsLoading && <p className="empty-history" role="status">正在读取审批申请…</p>}
+          {!approvalRequestsLoading && approvalRequestsError && <p className="approval-request-error" role="alert">{approvalRequestsError}</p>}
+          {!approvalRequestsLoading && !approvalRequestsError && approvalRequests.length === 0 && <p className="empty-history">暂无负责人变更申请</p>}
+          {!approvalRequestsLoading && !approvalRequestsError && approvalRequests.length > 0 && <div className="approval-request-list">
+            {approvalRequests.map((request) => <article className="approval-request-row" key={request.id}>
+              <div className="approval-request-heading"><strong>{request.requestNumber || '申请编号生成中'}</strong>
+                <span className={`approval-state approval-state-${request.status.toLowerCase()}`}>{request.status}</span></div>
+              <p>{request.originalAssignedToName ?? '未知原负责人'} → {request.requestedAssignedToName ?? '未知目标负责人'}</p>
+              {request.reason && <small>原因：{request.reason}</small>}
+              {request.approvalComments && <small>审批意见：{request.approvalComments}</small>}
+              {request.errorDetail && <small className="approval-request-error">处理信息：{request.errorDetail}</small>}
+              <time>{formatDate(request.completedAt ?? request.submittedAt)}</time>
+            </article>)}
+          </div>}
         </section>
 
         <section className="detail-section"><div className="section-heading"><h3>工单历史</h3><span>{timeline.length} RECORDS</span></div>
@@ -337,7 +388,7 @@ export default function WorkOrderWorkspacePage() {
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
   const [bulkAction, setBulkAction] = useState<WorkOrderBatchAction | null>(null)
   const [pendingAssignment, setPendingAssignment] = useState<{ workOrder: WorkOrder; employee: EmployeeOption } | null>(null)
-  const [bulkResults, setBulkResults] = useState<Array<{ workOrder: WorkOrder; success: boolean; message: string }> | null>(null)
+  const [bulkResults, setBulkResults] = useState<Array<{ workOrder: WorkOrder; success: boolean; partial?: boolean; pendingApproval?: boolean; message: string }> | null>(null)
   const [linkedWorkOrderIds, setLinkedWorkOrderIds] = useState<string[] | null>(null)
   const [linkedFilterLabel, setLinkedFilterLabel] = useState<string | null>(null)
   const [seedDialogOpen, setSeedDialogOpen] = useState(false)
@@ -359,7 +410,7 @@ export default function WorkOrderWorkspacePage() {
   }, [refreshToken])
 
   useEffect(() => {
-    if (!notice) return undefined
+    if (!notice || notice.kind === 'error') return undefined
     const timer = window.setTimeout(() => setNotice(null), 6500)
     return () => window.clearTimeout(timer)
   }, [notice])
@@ -430,17 +481,17 @@ export default function WorkOrderWorkspacePage() {
     setDialog(mode)
   }
 
-  const runMutation = async (action: () => Promise<void>, successMessage: string) => {
+  const runMutation = async (action: () => Promise<void | string>, successMessage: string) => {
     setBusy(true)
     setDialogError(null)
     try {
-      await action()
-      setNotice({ kind: 'success', message: successMessage })
+      const actionMessage = await action()
+      setNotice({ kind: 'success', message: actionMessage || successMessage })
       setDialog(null)
       setRefreshToken((value) => value + 1)
     } catch (mutationError) {
       const message = mutationError instanceof Error ? mutationError.message : '操作失败，请重新读取后确认数据。'
-      const partial = message.includes('工单主记录已更新') || message.includes('工单已创建，但')
+      const partial = mutationError instanceof PartialWorkOrderWriteError || message.includes('工单已创建，但')
       setNotice({ kind: 'error', message })
       if (partial) {
         setDialog(null)
@@ -515,13 +566,21 @@ export default function WorkOrderWorkspacePage() {
 
   const submitAssignment = (employeeId: string, note: string) => {
     if (!selectedWorkOrder) return Promise.resolve()
-    const employee = (state.employees ?? []).find((item) => item.id === employeeId)
-    if (!employee) {
-      setDialogError('请选择有效员工。')
-      return Promise.resolve()
-    }
     return runMutation(
-      () => assignDataverseWorkOrder(selectedWorkOrder, employee, state, note),
+      async () => {
+        const snapshot = await loadWorkOrderAssignmentSnapshot(selectedWorkOrder.id, employeeId)
+        if (!snapshot.employee.isActive || !snapshot.employee.isAvailableForOrder) {
+          throw new Error('目标员工当前不可接单，请刷新后重新选择。')
+        }
+        if (snapshot.employee.maxTaskLoad != null && snapshot.currentLoad >= snapshot.employee.maxTaskLoad) {
+          throw new Error(`${snapshot.employee.employeeName} 已达到最大工作负载（${snapshot.currentLoad}/${snapshot.employee.maxTaskLoad}）。`)
+        }
+        if (snapshot.workOrder.assignedToId) {
+          const submission = await submitAssignmentApprovalRequest(snapshot.workOrder, snapshot.employee, note)
+          return `负责人变更审批申请已提交${submission.requestNumber ? `（${submission.requestNumber}）` : ''}；审批完成后将自动更新工单。`
+        }
+        await assignDataverseWorkOrder(snapshot.workOrder, snapshot.employee, state, note, snapshot.currentLoad)
+      },
       selectedWorkOrder.assignedToId ? '工单已转派' : '工单已派发',
     )
   }
@@ -594,46 +653,93 @@ export default function WorkOrderWorkspacePage() {
   const executeBatchAction = async (input: WorkOrderBatchActionInput) => {
     const targets = pendingAssignment ? [pendingAssignment.workOrder] : selectedWorkOrders
     setBusy(true)
-    const results: Array<{ workOrder: WorkOrder; success: boolean; message: string }> = []
+    const results: Array<{ workOrder: WorkOrder; success: boolean; partial?: boolean; pendingApproval?: boolean; message: string }> = []
     let workloadState = state
+    let pendingApprovalCount = 0
     try {
+      let snapshotError: unknown = null
+      if (input.action !== 'assign') {
+        try {
+          workloadState = await loadWorkOrderStateFromDataverse()
+          setState(workloadState)
+        } catch (error) {
+          snapshotError = error
+        }
+      }
+
       for (const workOrder of targets) {
+        if (snapshotError) {
+          results.push({ workOrder, success: false, message: `未执行：无法刷新 Dataverse 最新状态。${snapshotError instanceof Error ? snapshotError.message : '读取失败'}` })
+          continue
+        }
+        const cachedWorkOrder = workloadState.workOrders.find((item) => item.id === workOrder.id)
+        if (input.action !== 'assign' && !cachedWorkOrder) {
+          results.push({ workOrder, success: false, message: '未执行：工单已不存在或当前身份无权读取。' })
+          continue
+        }
+        let latestWorkOrder = cachedWorkOrder ?? workOrder
         try {
           if (input.action === 'assign') {
-            const employee = pendingAssignment?.employee ?? state.employees?.find((item) => item.id === input.employeeId)
-            if (!employee) throw new Error('找不到有效的目标员工。')
-            await assignDataverseWorkOrder(workOrder, employee, workloadState, input.note)
-            const nextStatus = workOrder.status === WORK_ORDER_STATUS.new || workOrder.status === WORK_ORDER_STATUS.inProgress || workOrder.status === WORK_ORDER_STATUS.onHold
-              ? WORK_ORDER_STATUS.assigned : workOrder.status
-            workloadState = { ...workloadState, workOrders: workloadState.workOrders.map((item) => item.id === workOrder.id
-              ? { ...item, assignedToId: employee.id, assignedToName: employee.employeeName, status: nextStatus }
-              : item) }
+            const requestedEmployeeId = pendingAssignment?.employee.id ?? input.employeeId
+            if (!requestedEmployeeId) throw new Error('请选择目标员工。')
+            const snapshot = await loadWorkOrderAssignmentSnapshot(workOrder.id, requestedEmployeeId)
+            latestWorkOrder = snapshot.workOrder
+            if (!snapshot.employee.isActive || !snapshot.employee.isAvailableForOrder) {
+              throw new Error('目标员工当前不可接单。')
+            }
+            if (snapshot.employee.maxTaskLoad != null && snapshot.currentLoad + pendingApprovalCount >= snapshot.employee.maxTaskLoad) {
+              throw new Error(`${snapshot.employee.employeeName} 已达到最大工作负载或已有待审批申请占用容量（${snapshot.currentLoad + pendingApprovalCount}/${snapshot.employee.maxTaskLoad}）。`)
+            }
+            if (snapshot.workOrder.assignedToId) {
+              const submission = await submitAssignmentApprovalRequest(snapshot.workOrder, snapshot.employee, input.note)
+              pendingApprovalCount += 1
+              results.push({
+                workOrder: latestWorkOrder,
+                success: true,
+                pendingApproval: true,
+                message: `审批申请已提交${submission.requestNumber ? `：${submission.requestNumber}` : ''}，等待审批。`,
+              })
+              continue
+            }
+            await assignDataverseWorkOrder(snapshot.workOrder, snapshot.employee, workloadState, input.note, snapshot.currentLoad)
+            const nextStatus = latestWorkOrder.status === WORK_ORDER_STATUS.new || latestWorkOrder.status === WORK_ORDER_STATUS.inProgress || latestWorkOrder.status === WORK_ORDER_STATUS.onHold
+              ? WORK_ORDER_STATUS.assigned : latestWorkOrder.status
+            const updatedWorkOrder = { ...latestWorkOrder, assignedToId: snapshot.employee.id, assignedToName: snapshot.employee.employeeName, status: nextStatus }
+            workloadState = {
+              ...workloadState,
+              workOrders: [...workloadState.workOrders.filter((item) => item.id !== updatedWorkOrder.id), updatedWorkOrder],
+              employees: [...(workloadState.employees ?? []).filter((item) => item.id !== snapshot.employee.id), snapshot.employee],
+            }
+            setState(workloadState)
           } else if (input.action === 'priority') {
-            const category = state.serviceCategories?.find((item) => item.id === workOrder.serviceCategoryId)
-            await updateDataverseWorkOrder(workOrder, {
-              workOrderName: workOrder.workOrderName,
-              issueDescription: workOrder.issueDescription,
-              priority: input.priority ?? workOrder.priority,
-              departmentId: workOrder.departmentId ?? '',
-              serviceCategoryId: workOrder.serviceCategoryId ?? '',
-              expectedCompletionTime: workOrder.expectedCompletionTime,
-            }, workOrder.department, category?.serviceCategoryName ?? workOrder.serviceCategoryLabel ?? '')
+            const category = workloadState.serviceCategories?.find((item) => item.id === latestWorkOrder.serviceCategoryId)
+            await updateDataverseWorkOrder(latestWorkOrder, {
+              workOrderName: latestWorkOrder.workOrderName,
+              issueDescription: latestWorkOrder.issueDescription,
+              priority: input.priority ?? latestWorkOrder.priority,
+              departmentId: latestWorkOrder.departmentId ?? '',
+              serviceCategoryId: latestWorkOrder.serviceCategoryId ?? '',
+              expectedCompletionTime: latestWorkOrder.expectedCompletionTime,
+            }, latestWorkOrder.department, category?.serviceCategoryName ?? latestWorkOrder.serviceCategoryLabel ?? '')
           } else {
             const targetStatus = input.action === 'cancel' ? WORK_ORDER_STATUS.cancelled : input.status
             if (targetStatus === undefined) throw new Error('请选择目标状态。')
-            await transitionDataverseWorkOrder(workOrder, targetStatus, input.note)
+            await transitionDataverseWorkOrder(latestWorkOrder, targetStatus, input.note)
           }
-          results.push({ workOrder, success: true, message: '操作成功' })
+          results.push({ workOrder: latestWorkOrder, success: true, message: '操作成功' })
         } catch (itemError) {
-          results.push({ workOrder, success: false, message: itemError instanceof Error ? itemError.message : '操作失败' })
+          results.push({ workOrder: latestWorkOrder, success: false, partial: itemError instanceof PartialWorkOrderWriteError, message: itemError instanceof Error ? itemError.message : '操作失败' })
         }
       }
     } finally {
       setBusy(false)
     }
-    const succeeded = results.filter((item) => item.success).length
+    const succeeded = results.filter((item) => item.success && !item.pendingApproval).length
+    const pendingCount = results.filter((item) => item.pendingApproval).length
+    const failedCount = results.filter((item) => !item.success && !item.partial).length
+    const partialCount = results.filter((item) => item.partial).length
     setBulkResults(results)
-    setNotice({ kind: results.some((item) => !item.success) ? 'error' : 'success', message: `批量操作完成：${succeeded} 项成功，${results.length - succeeded} 项失败。` })
+    setNotice({ kind: results.some((item) => !item.success) ? 'error' : 'success', message: `批量操作完成：${succeeded} 项已执行，${pendingCount} 项审批申请待处理，${failedCount} 项失败，${partialCount} 项部分成功。` })
     setBulkAction(null)
     setPendingAssignment(null)
     setSelectedWorkOrderKeys([])
@@ -673,10 +779,10 @@ export default function WorkOrderWorkspacePage() {
       {notice && <div className={`operation-notice notice-${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>
         <span>{notice.kind === 'success' ? '✓' : '!'}</span><p>{notice.message}</p><button className="icon-button" aria-label="关闭提示" onClick={() => setNotice(null)}>×</button>
       </div>}
-      {bulkResults && <section className="bulk-results" role="status" aria-label="批量操作结果">
-        <header><div><strong>批量操作结果</strong><span>{bulkResults.filter((item) => item.success).length} 成功 · {bulkResults.filter((item) => !item.success).length} 失败</span></div>
+      {bulkResults && <section className="bulk-results" role={bulkResults.some((item) => !item.success) ? 'alert' : 'status'} aria-label="批量操作结果">
+        <header><div><strong>批量操作结果</strong><span>{bulkResults.filter((item) => item.success && !item.pendingApproval).length} 已执行 · {bulkResults.filter((item) => item.pendingApproval).length} 待审批 · {bulkResults.filter((item) => !item.success && !item.partial).length} 失败 · {bulkResults.filter((item) => item.partial).length} 部分成功</span></div>
           <button className="icon-button" type="button" aria-label="关闭批量操作结果" onClick={dismissBulkResults}>×</button></header>
-        <ul>{bulkResults.map((result) => <li key={result.workOrder.id} className={result.success ? 'bulk-result-success' : 'bulk-result-failure'}>
+        <ul>{bulkResults.map((result) => <li key={result.workOrder.id} className={result.partial ? 'bulk-result-partial' : result.pendingApproval ? 'bulk-result-pending' : result.success ? 'bulk-result-success' : 'bulk-result-failure'}>
           <strong>{result.workOrder.workOrderNumber || result.workOrder.workOrderName}</strong><span>{result.message}</span>
         </li>)}</ul>
       </section>}
@@ -715,7 +821,7 @@ export default function WorkOrderWorkspacePage() {
           </section>
 
           <section className="work-order-card work-order-list-card">
-            <header className="list-header work-order-list-header"><div className="work-order-list-heading"><div className="list-title-row"><h2>工单队列</h2><span className="result-count">{visibleWorkOrders.length}</span></div><p>按当前已读取记录筛选；选择行可查看完整字段与流转历史</p></div>
+            <header className="list-header work-order-list-header"><div className="work-order-list-heading"><div className="list-title-row"><h2>工单队列</h2><span className="result-count">{visibleWorkOrders.length}</span></div><p>在当前身份可读取的 {state.workOrders.length} 条工单中筛选；选择行可查看完整字段与流转历史</p></div>
               <div className="list-controls">
                 <SearchInput value={searchInput} onChange={(value) => { setSearchInput(value); setPage(1) }} onSearch={setSearch} onClear={() => { setSearch(''); setPage(1) }}
                   placeholder="搜索编号、标题、描述或负责人" ariaLabel="搜索工单" />
@@ -738,7 +844,7 @@ export default function WorkOrderWorkspacePage() {
             <footer className="table-footer work-order-table-footer"><span>显示 <strong>{visibleWorkOrders.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, visibleWorkOrders.length)}</strong> / {visibleWorkOrders.length}</span>
               <Pagination page={page} pageSize={pageSize} total={visibleWorkOrders.length} loading={loading}
                 pageSizeOptions={[10, 25, 50]} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />
-              <span className="demo-pagination">已读取 {state.workOrders.length} 条工单</span>
+              <span className="demo-pagination">当前身份可读取 {state.workOrders.length} 条工单</span>
             </footer>
           </section>
         </>}

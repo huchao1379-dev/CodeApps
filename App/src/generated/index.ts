@@ -5,17 +5,21 @@
 
 // Models
 export * as CommonModels from './models/CommonModels';
+export * as Cr590_assignmentapprovalrequestsModel from './models/Cr590_assignmentapprovalrequestsModel';
 export * as Cr590_assignmentsModel from './models/Cr590_assignmentsModel';
 export * as Cr590_servicecategoriesModel from './models/Cr590_servicecategoriesModel';
 export * as Cr590_table1sModel from './models/Cr590_table1sModel';
 export * as Cr590_table2sModel from './models/Cr590_table2sModel';
 export * as Cr590_tablesModel from './models/Cr590_tablesModel';
 export * as Cr590_workordersModel from './models/Cr590_workordersModel';
+export * as _e8187cbfModel from './models/_e8187cbfModel';
 
 // Services
+export * from './services/Cr590_assignmentapprovalrequestsService';
 export * from './services/Cr590_assignmentsService';
 export * from './services/Cr590_servicecategoriesService';
 export * from './services/Cr590_table1sService';
 export * from './services/Cr590_table2sService';
 export * from './services/Cr590_tablesService';
 export * from './services/Cr590_workordersService';
+export * from './services/_e8187cbfService';

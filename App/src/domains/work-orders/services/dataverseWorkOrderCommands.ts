@@ -91,6 +91,13 @@ function errorMessage(error: unknown): string {
   return '运行时未提供错误详情'
 }
 
+export class PartialWorkOrderWriteError extends Error {
+  constructor(stage: string, source: unknown, recordAction = '已更新') {
+    super(`部分成功：工单主记录${recordAction}，但${stage}失败。页面将重新读取 Dataverse；请核对当前工单、派发记录和历史后再继续操作。原因：${errorMessage(source)}`)
+    this.name = 'PartialWorkOrderWriteError'
+  }
+}
+
 function unwrapWrite<T>(result: { success: boolean; data: T; error?: unknown }, source: string): T {
   if (!result.success) throw new Error(`Dataverse ${source} 写入失败：${errorMessage(result.error)}`)
   return result.data
@@ -159,10 +166,10 @@ function validateWorkOrderInput(input: WorkOrderInput): void {
   if (!input.serviceCategoryId) throw new Error('请选择服务类别。')
 }
 
-function ensureAvailableEmployee(employee: EmployeeOption, state: WorkOrderStoreState): void {
+function ensureAvailableEmployee(employee: EmployeeOption, state: WorkOrderStoreState, latestLoad?: number): void {
   if (!employee.isActive) throw new Error('不能派发给已停用的员工。')
   if (!employee.isAvailableForOrder) throw new Error('该员工当前不可接单。')
-  const currentLoad = state.workOrders.filter((workOrder) =>
+  const currentLoad = latestLoad ?? state.workOrders.filter((workOrder) =>
     workOrder.assignedToId === employee.id && ACTIVE_STATUSES.includes(workOrder.status),
   ).length
   if (employee.maxTaskLoad != null && currentLoad >= employee.maxTaskLoad) {
@@ -170,8 +177,8 @@ function ensureAvailableEmployee(employee: EmployeeOption, state: WorkOrderStore
   }
 }
 
-function partialFailure(stage: string, error: unknown): Error {
-  return new Error(`工单主记录已更新，但${stage}失败。请先重新读取工单和历史记录，确认实际状态后再继续。原因：${errorMessage(error)}`)
+function partialFailure(stage: string, error: unknown, recordAction?: string): PartialWorkOrderWriteError {
+  return new PartialWorkOrderWriteError(stage, error, recordAction)
 }
 
 export async function createDataverseWorkOrder(input: WorkOrderInput, departmentName: string, categoryName: string): Promise<string> {
@@ -215,7 +222,7 @@ export async function createDataverseWorkOrder(input: WorkOrderInput, department
   try {
     await createHistory({ workOrder, type: HISTORY_TYPE.created, description: '工单已创建并进入待分派状态', occurredAt: now, newStatus: WORK_ORDER_STATUS.new })
   } catch (error) {
-    throw partialFailure('创建历史记录', error)
+    throw partialFailure('创建历史记录', error, '已创建')
   }
   return workOrderId
 }
@@ -274,12 +281,13 @@ export async function assignDataverseWorkOrder(
   employee: EmployeeOption,
   state: WorkOrderStoreState,
   note: string,
+  latestLoad?: number,
 ): Promise<void> {
   if (!([WORK_ORDER_STATUS.new, WORK_ORDER_STATUS.assigned, WORK_ORDER_STATUS.inProgress, WORK_ORDER_STATUS.onHold] as readonly WorkOrderStatus[]).includes(current.status)) {
     throw new Error('当前状态不允许派发或转派。')
   }
   if (current.assignedToId === employee.id) throw new Error('该员工已经是当前负责人。')
-  ensureAvailableEmployee(employee, state)
+  ensureAvailableEmployee(employee, state, latestLoad)
   const kind = current.assignedToId ? 'reassignment' : 'initial'
   if (kind === 'reassignment' && !note.trim()) throw new Error('转派时请填写原因。')
   if (note.length > 100) throw new Error('派发说明不能超过 100 个字符。')

@@ -113,6 +113,7 @@ export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOr
           {action === 'cancel' && <p className="bulk-command-note">取消工单属于终止操作；每条记录仍会经过状态规则校验，并保留取消及撤派历史。</p>}
           {cancelBlockedCount > 0 && <p className="bulk-warning" role="status">其中 {cancelBlockedCount} 张工单当前状态不允许取消；其他符合条件的记录会继续处理，并逐条反馈结果。</p>}
           {action === 'assign' && selectedEmployee && <p className="bulk-command-note">每条工单会分别校验员工启用状态、可接单状态和累计工作负载。</p>}
+          {action === 'assign' && workOrders.some((item) => item.assignedToId) && <p className="assignment-approval-note">未分配工单会直接派发；已有负责人的工单会提交审批申请，审批通过后才更新负责人。</p>}
           {assignmentWarning && <p className="bulk-warning" role="status">{assignmentWarning}</p>}
           {assignmentBlocker && <p className="bulk-blocker" role="alert">{assignmentBlocker}</p>}
           {action !== 'priority' && <label>{action === 'cancel' ? '取消原因' : action === 'status' && status === WORK_ORDER_STATUS.resolved ? '解决方案' : action === 'status' && status === WORK_ORDER_STATUS.onHold ? '暂停原因' : '操作说明'}{needsNote && <b>*</b>}
@@ -122,7 +123,7 @@ export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOr
         </div>
         <footer className="modal-footer"><button className="button button-quiet" type="button" disabled={busy} onClick={onClose}>取消</button>
           <button className={action === 'cancel' ? 'button button-danger-quiet' : 'button button-primary'} type="submit" disabled={busy || Boolean(assignmentBlocker) || (action === 'assign' && !employeeId) || (action === 'status' && statusOptions.length === 0)}>
-            {busy ? '正在逐条处理…' : `确认执行 ${workOrders.length} 项`}
+            {busy ? '正在逐条处理…' : `确认执行 ${workOrders.length} 项${action === 'assign' && workOrders.some((item) => item.assignedToId) ? '（含审批）' : ''}`}
           </button>
         </footer>
       </form>

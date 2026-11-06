@@ -185,6 +185,10 @@ export function WorkOrderOperationsDashboard({ loading, error, onRetry, workOrde
       <FilterBar definitions={filterDefinitions} values={filters} onChange={setFilters} />
     </section>
 
+    <p className="operations-scope-note" role="note">
+      统计范围：当前身份可读取的全部工单，共 {workOrders.length} 条。Dataverse 通过 continuation token 分批读取后汇总；筛选和图表统计基于本次完整读取快照。
+    </p>
+
     {loading && <p className="operations-loading" role="status">正在读取 Dataverse 工单数据…</p>}
     {!loading && initialLoadFailed && <div className="operations-error" role="alert">
       <div><strong>无法读取工单数据</strong><p>{error}</p></div>

@@ -198,6 +198,7 @@ export function AssignmentDialog({
     }}>
       <div className="modal-content">
         <div className="current-assignee"><span>当前负责人</span><strong>{workOrder.assignedToName ?? '未分派'}</strong></div>
+        {isReassignment && <p className="assignment-approval-note">负责人变更需要审批。提交后工单仍由当前负责人负责，审批通过后 Flow 会更新工单并发送邮件通知。</p>}
         <label>新负责人<b>*</b><select required value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
           <option value="">选择员工</option>
           {eligible.map((employee) => {
@@ -215,7 +216,7 @@ export function AssignmentDialog({
         {error && <p className="form-error" role="alert">{error}</p>}
       </div>
       <footer className="modal-footer"><button className="button button-quiet" type="button" onClick={onClose} disabled={busy}>取消</button>
-        <button className="button button-primary" type="submit" disabled={busy || eligible.length === 0 || !employeeId || atCapacity}>{busy ? '提交中…' : isReassignment ? '确认转派' : '确认派发'}</button>
+        <button className="button button-primary" type="submit" disabled={busy || eligible.length === 0 || !employeeId || atCapacity}>{busy ? '提交中…' : isReassignment ? '提交审批申请' : '确认派发'}</button>
       </footer>
     </form>
   </ModalShell>

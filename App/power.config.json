@@ -9,7 +9,20 @@
   "buildEntryPoint": "index.html",
   "localAppUrl": "http://localhost:3000",
   "logoPath": "Default",
-  "connectionReferences": {},
+  "connectionReferences": {
+    "df2bde14-3b04-406f-9542-aa787a9c645a": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "_e8187cbf"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "06116a1f-a8d9-f111-84e8-000d3a815930",
+        "workflowDisplayName": "提交负责人变更申请",
+        "workflowName": "101b3581-0fe7-679b-6b31-38048e27461a"
+      }
+    }
+  },
   "databaseReferences": {
     "default.cds": {
       "dataSources": {
@@ -41,6 +54,11 @@
         "servicecategory": {
           "entitySetName": "cr590_servicecategories",
           "logicalName": "cr590_servicecategory",
+          "isHidden": false
+        },
+        "assignmentapprovalrequest": {
+          "entitySetName": "cr590_assignmentapprovalrequests",
+          "logicalName": "cr590_assignmentapprovalrequest",
           "isHidden": false
         }
       },
