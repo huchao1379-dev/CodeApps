@@ -1,6 +1,6 @@
 import { useMemo, useState, type DragEvent } from 'react'
 import { PRIORITY, PRIORITY_LABELS, STATUS_LABELS, WORK_ORDER_STATUS, type EmployeeOption, type WorkOrder, type WorkOrderStatus } from '../types/workOrder.types'
-import { SearchInput } from '../../../shared/components'
+import { SearchInput, StatusBadge } from '../../../shared/components'
 
 const ACTIVE_STATUSES: readonly WorkOrderStatus[] = [WORK_ORDER_STATUS.assigned, WORK_ORDER_STATUS.inProgress, WORK_ORDER_STATUS.onHold]
 const PRIORITY_CLASS = { [PRIORITY.low]: 'low', [PRIORITY.medium]: 'medium', [PRIORITY.high]: 'high', [PRIORITY.critical]: 'critical' }
@@ -109,7 +109,7 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
             onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropWorkOrder(event, droppedEmployee)}>
             <header className="engineer-lane-header"><span className="engineer-avatar">{employee.employeeName.slice(-1)}</span>
               <span className="engineer-identity"><strong>{employee.employeeName}</strong><small>{employee.department ?? '未设置部门'}</small></span>
-              <span className={`engineer-availability${unavailable ? ' availability-off' : ''}`}>{unavailable ? '暂不可接单' : '可接单'}</span>
+              <StatusBadge status={unavailable ? 'unavailable' : 'available'} label={unavailable ? '暂不可接单' : '可接单'} size="small" />
             </header>
             <div className="workload-summary"><span>活动工单</span><strong>{workload}<small> / {capacity ?? '∞'}</small></strong></div>
             <div className="workload-track"><span style={{ width: capacity ? `${Math.min(100, workload / capacity * 100)}%` : workload > 0 ? '25%' : '0%' }} /></div>

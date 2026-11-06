@@ -23,6 +23,9 @@ export interface WorkOrderBatchActionDialogProps {
   employees: EmployeeOption[]
   busy: boolean
   error: string | null
+  pendingApprovalLoads: Map<string, number>
+  pendingApprovalLoadsLoading: boolean
+  pendingApprovalLoadsError: string | null
   lockedEmployee?: EmployeeOption | null
   onClose: () => void
   onSubmit: (input: WorkOrderBatchActionInput) => Promise<void>
@@ -35,7 +38,7 @@ const ACTION_TITLES: Record<WorkOrderBatchAction, string> = {
   cancel: '批量取消工单',
 }
 
-export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOrders, employees, busy, error, lockedEmployee, onClose, onSubmit }: WorkOrderBatchActionDialogProps) {
+export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOrders, employees, busy, error, pendingApprovalLoads, pendingApprovalLoadsLoading, pendingApprovalLoadsError, lockedEmployee, onClose, onSubmit }: WorkOrderBatchActionDialogProps) {
   const [employeeId, setEmployeeId] = useState('')
   const [priority, setPriority] = useState<Priority>(PRIORITY.medium)
   const [status, setStatus] = useState<WorkOrderStatus>(WORK_ORDER_STATUS.inProgress)
@@ -67,10 +70,15 @@ export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOr
     : 0
   const selectedEmployee = lockedEmployee ?? employees.find((item) => item.id === employeeId)
   const currentLoad = selectedEmployee ? allWorkOrders.filter((item) => item.assignedToId === selectedEmployee.id && ACTIVE_STATUSES.includes(item.status)).length : 0
-  const availableSlots = selectedEmployee?.maxTaskLoad == null ? Infinity : Math.max(0, selectedEmployee.maxTaskLoad - currentLoad)
+  const pendingLoad = selectedEmployee ? pendingApprovalLoads.get(selectedEmployee.id) ?? 0 : 0
+  const availableSlots = selectedEmployee?.maxTaskLoad == null ? Infinity : Math.max(0, selectedEmployee.maxTaskLoad - currentLoad - pendingLoad)
   const additionalAssignments = selectedEmployee ? workOrders.filter((item) => item.assignedToId !== selectedEmployee.id).length : 0
   const alreadyAssignedCount = selectedEmployee ? workOrders.length - additionalAssignments : 0
-  const assignmentBlocker = action === 'assign' && selectedEmployee && !selectedEmployee.isActive
+  const assignmentBlocker = action === 'assign' && pendingApprovalLoadsLoading
+    ? '正在读取该负责人已有的待审批申请，请稍候。'
+    : action === 'assign' && pendingApprovalLoadsError
+      ? `无法完成容量校验：${pendingApprovalLoadsError}`
+      : action === 'assign' && selectedEmployee && !selectedEmployee.isActive
     ? '该员工已停用，不能接收新工单。'
     : action === 'assign' && selectedEmployee && !selectedEmployee.isAvailableForOrder
       ? '该员工当前不可接单。'
@@ -80,7 +88,7 @@ export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOr
           ? '该员工已达到最大工作负载，无法继续分派。'
           : null
   const assignmentWarning = action === 'assign' && selectedEmployee && additionalAssignments > availableSlots
-    ? `容量冲突：当前剩余 ${Number.isFinite(availableSlots) ? availableSlots : '不限'} 个名额，本次有 ${additionalAssignments} 张工单需要新增负载；超出容量的记录会逐条失败并显示结果。`
+    ? `容量冲突：当前活动工单 ${currentLoad}，已有待审批申请 ${pendingLoad}，剩余 ${Number.isFinite(availableSlots) ? availableSlots : '不限'} 个名额；本次有 ${additionalAssignments} 张工单需要新增负载。`
     : action === 'assign' && alreadyAssignedCount > 0
       ? `${alreadyAssignedCount} 张所选工单已由该负责人负责，重复派发会被逐条拒绝。`
       : null
@@ -112,7 +120,7 @@ export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOr
             : <p className="bulk-blocker" role="alert">所选工单没有共同的合法目标状态，请调整选择或逐条更新。{resumeBlockedCount > 0 ? ` ${resumeBlockedCount} 张重新处理前需要指定负责人。` : ''}{closeBlockedCount > 0 ? ` ${closeBlockedCount} 张关闭前需要有解决方案。` : ''}</p>)}
           {action === 'cancel' && <p className="bulk-command-note">取消工单属于终止操作；每条记录仍会经过状态规则校验，并保留取消及撤派历史。</p>}
           {cancelBlockedCount > 0 && <p className="bulk-warning" role="status">其中 {cancelBlockedCount} 张工单当前状态不允许取消；其他符合条件的记录会继续处理，并逐条反馈结果。</p>}
-          {action === 'assign' && selectedEmployee && <p className="bulk-command-note">每条工单会分别校验员工启用状态、可接单状态和累计工作负载。</p>}
+          {action === 'assign' && selectedEmployee && <p className="bulk-command-note">每条工单会分别校验员工启用状态、可接单状态、活动工单和已有待审批申请占用的工作负载。</p>}
           {action === 'assign' && workOrders.some((item) => item.assignedToId) && <p className="assignment-approval-note">未分配工单会直接派发；已有负责人的工单会提交审批申请，审批通过后才更新负责人。</p>}
           {assignmentWarning && <p className="bulk-warning" role="status">{assignmentWarning}</p>}
           {assignmentBlocker && <p className="bulk-blocker" role="alert">{assignmentBlocker}</p>}

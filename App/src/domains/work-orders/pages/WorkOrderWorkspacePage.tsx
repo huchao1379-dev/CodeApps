@@ -12,7 +12,8 @@ import {
   type WorkOrderStoreState,
 } from '../types/workOrder.types'
 import { loadWorkOrderAssignmentSnapshot, loadWorkOrderStateFromDataverse } from '../services/dataverseWorkOrderRepository'
-import { loadAssignmentApprovalRequests, type AssignmentApprovalRequest } from '../services/assignmentApprovalRepository'
+import { loadAssignmentApprovalRequests, loadPendingAssignmentCounts, type AssignmentApprovalRequest } from '../services/assignmentApprovalRepository'
+import { getAssignmentApprovalStatusLabel } from '../config/assignmentApprovalChoices'
 import { submitAssignmentApprovalRequest } from '../../../integrations/power-automate/assignmentApprovalAdapter'
 import {
   assignDataverseWorkOrder,
@@ -45,19 +46,21 @@ import {
   Pagination,
   SearchInput,
   StatusBadge,
+  Toast,
   useOverlayFocus,
 } from '../../../shared/components'
 import type { BulkAction, DatePeriod, FilterDefinition, FilterValues, SortState, TableColumn } from '../../../shared/components'
 import { AppHeader, AppLayout, AppSidebar, PageContainer } from '../../../workbench/layout'
 import { WorkOrderDispatchBoard } from '../components/WorkOrderDispatchBoard'
 import { WorkOrderOperationsDashboard } from '../components/WorkOrderOperationsDashboard'
+import { AssignmentApprovalRequestsPage } from '../components/AssignmentApprovalRequestsPage'
 import { WorkOrderBatchActionDialog, type WorkOrderBatchAction, type WorkOrderBatchActionInput } from '../components/WorkOrderBatchActionDialog'
 import './WorkOrderWorkspacePage.css'
 
 const emptyState: WorkOrderStoreState = {
   workOrders: [], assignments: [], events: [], employees: [], departments: [], serviceCategories: [],
 }
-const PAGE_SIZE = 25
+const PAGE_SIZE = 10
 const ACTIVE_STATUSES: readonly WorkOrderStatus[] = [WORK_ORDER_STATUS.assigned, WORK_ORDER_STATUS.inProgress, WORK_ORDER_STATUS.onHold]
 const localDateValue = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
@@ -74,7 +77,7 @@ function getDatePeriodBounds(period: DatePeriod, anchorDate: string): { start: n
   return { start: start.getTime(), end: end.getTime() }
 }
 
-type View = '概览' | '工单管理' | '派发看板' | '资源目录'
+type View = '概览' | '工单管理' | '派发看板' | '资源目录' | '负责人申请'
 type ResourceTab = 'employees' | 'departments' | 'categories'
 type DialogMode = 'create' | 'edit' | 'assign' | 'unassign' | 'status' | null
 
@@ -88,16 +91,6 @@ const formatDate = (value: string | null | undefined, dateOnly = false) => {
     ? { year: 'numeric', month: 'short', day: 'numeric' }
     : { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' },
   ).format(date)
-}
-
-const statusClass: Record<WorkOrderStatus, string> = {
-  [WORK_ORDER_STATUS.new]: 'new',
-  [WORK_ORDER_STATUS.assigned]: 'assigned',
-  [WORK_ORDER_STATUS.inProgress]: 'progress',
-  [WORK_ORDER_STATUS.onHold]: 'hold',
-  [WORK_ORDER_STATUS.resolved]: 'resolved',
-  [WORK_ORDER_STATUS.closed]: 'closed',
-  [WORK_ORDER_STATUS.cancelled]: 'cancelled',
 }
 
 const priorityClass: Record<Priority, string> = {
@@ -123,11 +116,7 @@ const workOrderColumns: TableColumn<WorkOrder>[] = [
 ]
 
 function StatusPill({ status }: { status: WorkOrderStatus }) {
-  const variant = status === WORK_ORDER_STATUS.new || status === WORK_ORDER_STATUS.onHold ? 'warning'
-    : status === WORK_ORDER_STATUS.assigned || status === WORK_ORDER_STATUS.inProgress ? 'info'
-      : status === WORK_ORDER_STATUS.resolved ? 'success'
-        : status === WORK_ORDER_STATUS.cancelled ? 'danger' : 'neutral'
-  return <StatusBadge className={`work-order-status status-${statusClass[status]}`} label={STATUS_LABELS[status]} variant={variant} size="small" />
+  return <StatusBadge status={STATUS_LABELS[status]} label={STATUS_LABELS[status]} size="small" />
 }
 
 function PriorityLabel({ priority }: { priority: Priority }) {
@@ -257,7 +246,7 @@ function WorkOrderDetail({
           {!approvalRequestsLoading && !approvalRequestsError && approvalRequests.length > 0 && <div className="approval-request-list">
             {approvalRequests.map((request) => <article className="approval-request-row" key={request.id}>
               <div className="approval-request-heading"><strong>{request.requestNumber || '申请编号生成中'}</strong>
-                <span className={`approval-state approval-state-${request.status.toLowerCase()}`}>{request.status}</span></div>
+                <StatusBadge status={request.status} label={getAssignmentApprovalStatusLabel(request.status)} size="small" /></div>
               <p>{request.originalAssignedToName ?? '未知原负责人'} → {request.requestedAssignedToName ?? '未知目标负责人'}</p>
               {request.reason && <small>原因：{request.reason}</small>}
               {request.approvalComments && <small>审批意见：{request.approvalComments}</small>}
@@ -283,15 +272,16 @@ function WorkOrderDetail({
   </DetailPanel>
 }
 
-function ResourceDirectory({ state, tab, query, loading, onTabChange, onQueryChange, onEditResource }: {
+function ResourceDirectory({ state, tab, query, loading, onQueryChange, onEditResource }: {
   state: WorkOrderStoreState
   tab: ResourceTab
   query: string
   loading: boolean
-  onTabChange: (tab: ResourceTab) => void
   onQueryChange: (query: string) => void
   onEditResource: (resource: EditableResource) => void
 }) {
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const normalized = query.trim().toLocaleLowerCase()
   const rows = useMemo(() => {
     if (tab === 'employees') return (state.employees ?? []).filter((row) =>
@@ -304,6 +294,16 @@ function ResourceDirectory({ state, tab, query, loading, onTabChange, onQueryCha
       [row.categoryCode, row.serviceCategoryName, row.defaultDepartmentName, row.description].some((value) => value?.toLocaleLowerCase().includes(normalized)),
     )
   }, [state, tab, normalized])
+  const pageCount = Math.max(1, Math.ceil(rows.length / Math.max(1, pageSize)))
+  const currentPage = Math.min(page, pageCount)
+  const pageRows = useMemo(
+    () => rows.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [rows, currentPage, pageSize],
+  )
+  useEffect(() => { setPage(1) }, [tab, query])
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount)
+  }, [page, pageCount])
   const editableRowProps = (resource: EditableResource) => ({
     tabIndex: 0,
     'data-clickable': 'true',
@@ -317,44 +317,50 @@ function ResourceDirectory({ state, tab, query, loading, onTabChange, onQueryCha
   const editButton = (resource: EditableResource, label: string) => <button className="resource-edit-action" type="button" title={`编辑${label}`}
     aria-label={`编辑${label}`} onClick={(event) => { event.stopPropagation(); onEditResource(resource) }}>✎</button>
 
+  const title = tab === 'employees' ? '员工' : tab === 'departments' ? '部门' : '服务类别'
+  const rangeStart = rows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const rangeEnd = Math.min(currentPage * pageSize, rows.length)
+
   return <section className="work-order-card resource-card">
-    <header className="list-header"><div><div className="list-title-row"><h2>基础资源</h2><span className="result-count">{loading ? '…' : rows.length}</span></div><p>员工、部门与服务类别的 Dataverse 当前记录</p></div>
+    <header className="list-header"><div><div className="list-title-row"><h2>{title}</h2><span className="result-count">{loading ? '…' : rows.length}</span></div><p>在左侧资源目录下切换类别；单击记录行可编辑字段</p></div>
       <SearchInput value={query} onChange={onQueryChange} placeholder="搜索名称、编号或说明" ariaLabel="搜索基础资源" />
     </header>
-    <div className="resource-tabs" role="tablist" aria-label="资源类型">
-      <button role="tab" aria-selected={tab === 'employees'} className={tab === 'employees' ? 'resource-tab resource-tab-active' : 'resource-tab'} onClick={() => onTabChange('employees')}>员工 <span>{state.employees?.length ?? 0}</span></button>
-      <button role="tab" aria-selected={tab === 'departments'} className={tab === 'departments' ? 'resource-tab resource-tab-active' : 'resource-tab'} onClick={() => onTabChange('departments')}>部门 <span>{state.departments?.length ?? 0}</span></button>
-      <button role="tab" aria-selected={tab === 'categories'} className={tab === 'categories' ? 'resource-tab resource-tab-active' : 'resource-tab'} onClick={() => onTabChange('categories')}>服务类别 <span>{state.serviceCategories?.length ?? 0}</span></button>
-    </div>
     {loading ? <LoadingState label="正在读取基础资源…" /> : <>
     <div className="table-scroll resource-scroll">
       {tab === 'employees' && <table className="work-order-table resource-table"><thead><tr><th>员工</th><th>部门</th><th>邮箱</th><th>性别</th><th>年龄</th><th>入职日期</th><th>接单状态</th><th>负载上限</th><th>技能</th><th aria-label="操作" /></tr></thead>
-        <tbody>{(rows as NonNullable<WorkOrderStoreState['employees']>).map((employee) => <tr key={employee.id} {...editableRowProps({ type: 'employee', record: employee })}>
+        <tbody>{(pageRows as NonNullable<WorkOrderStoreState['employees']>).map((employee) => <tr key={employee.id} {...editableRowProps({ type: 'employee', record: employee })}>
           <td><div className="assignee-cell"><Avatar small name={employee.employeeName} /><strong>{employee.employeeName}</strong></div></td>
           <td>{employee.department ?? '—'}</td><td>{employee.email ?? '—'}</td><td>{employee.gender ?? '—'}</td><td>{employee.age ?? '—'}</td>
-          <td>{formatDate(employee.hireDate, true)}</td><td><span className={employee.isActive ? 'resource-state state-active' : 'resource-state state-inactive'}>{employee.isActive ? '在职' : '停用'}</span>
-            <small className="availability-label">{employee.isAvailableForOrder ? '可接单' : '暂不可接单'}</small></td>
+          <td>{formatDate(employee.hireDate, true)}</td><td><div className="resource-status-stack">
+            <StatusBadge status={employee.isActive ? 'active' : 'inactive'} label={employee.isActive ? '在职' : '停用'} size="small" />
+            <StatusBadge status={employee.isAvailableForOrder ? 'available' : 'unavailable'} label={employee.isAvailableForOrder ? '可接单' : '暂不可接单'} size="small" />
+          </div></td>
           <td>{employee.maxTaskLoad ?? '未设置'}</td><td className="resource-skills">{employee.skills ?? '—'}</td>
           <td className="resource-actions">{editButton({ type: 'employee', record: employee }, '员工')}</td>
         </tr>)}</tbody></table>}
       {tab === 'departments' && <table className="work-order-table resource-table"><thead><tr><th>部门编号</th><th>部门名称</th><th>部门经理</th><th>说明</th><th>成立日期</th><th>状态</th><th aria-label="操作" /></tr></thead>
-        <tbody>{(rows as NonNullable<WorkOrderStoreState['departments']>).map((department) => <tr key={department.id} {...editableRowProps({ type: 'department', record: department })}>
+        <tbody>{(pageRows as NonNullable<WorkOrderStoreState['departments']>).map((department) => <tr key={department.id} {...editableRowProps({ type: 'department', record: department })}>
           <td>{department.departmentCode || '—'}</td><td><strong>{department.departmentName}</strong></td><td>{department.managerName ?? '—'}</td>
           <td>{department.description ?? '—'}</td><td>{formatDate(department.establishedDate, true)}</td>
-          <td><span className={department.isActive ? 'resource-state state-active' : 'resource-state state-inactive'}>{department.isActive ? '启用' : '停用'}</span></td>
+          <td><StatusBadge status={department.isActive ? 'active' : 'inactive'} label={department.isActive ? '启用' : '停用'} size="small" /></td>
           <td className="resource-actions">{editButton({ type: 'department', record: department }, '部门')}</td>
         </tr>)}</tbody></table>}
       {tab === 'categories' && <table className="work-order-table resource-table"><thead><tr><th>类别编号</th><th>服务类别</th><th>默认部门</th><th>默认优先级</th><th>说明</th><th>状态</th><th aria-label="操作" /></tr></thead>
-        <tbody>{(rows as NonNullable<WorkOrderStoreState['serviceCategories']>).map((category) => <tr key={category.id} {...editableRowProps({ type: 'category', record: category })}>
+        <tbody>{(pageRows as NonNullable<WorkOrderStoreState['serviceCategories']>).map((category) => <tr key={category.id} {...editableRowProps({ type: 'category', record: category })}>
           <td>{category.categoryCode || '—'}</td><td><strong>{category.serviceCategoryName}</strong></td><td>{category.defaultDepartmentName ?? '—'}</td>
           <td>{category.defaultPriority === null ? '—' : PRIORITY_LABELS[category.defaultPriority]}</td><td>{category.description ?? '—'}</td>
-          <td><span className={category.isActive ? 'resource-state state-active' : 'resource-state state-inactive'}>{category.isActive ? '启用' : '停用'}</span></td>
+          <td><StatusBadge status={category.isActive ? 'active' : 'inactive'} label={category.isActive ? '启用' : '停用'} size="small" /></td>
           <td className="resource-actions">{editButton({ type: 'category', record: category }, '服务类别')}</td>
         </tr>)}</tbody></table>}
     </div>
     {rows.length === 0 && <EmptyState title={normalized ? '没有匹配的记录' : '暂无资源记录'} description={normalized ? '调整搜索词后再试。' : '该数据源当前没有可显示的记录。'} />}
     </>}
-    <footer className="table-footer"><span>显示 <strong>{loading ? '—' : rows.length}</strong> 条</span><span className="demo-pagination">{loading ? '正在读取记录…' : '已读取所有可访问记录'}</span></footer>
+    <footer className="table-footer work-order-table-footer">
+      <span>显示 <strong>{loading ? '—' : `${rangeStart}–${rangeEnd}`}</strong> / {loading ? '—' : rows.length}</span>
+      <Pagination page={currentPage} pageSize={pageSize} total={rows.length} loading={loading}
+        pageSizeOptions={[10, 20, 50]} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />
+      <span className="demo-pagination">{loading ? '正在读取记录…' : '已读取所有可访问记录'}</span>
+    </footer>
   </section>
 }
 
@@ -387,6 +393,9 @@ export default function WorkOrderWorkspacePage() {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
   const [bulkAction, setBulkAction] = useState<WorkOrderBatchAction | null>(null)
+  const [pendingApprovalLoads, setPendingApprovalLoads] = useState<Map<string, number>>(new Map())
+  const [pendingApprovalLoadsLoading, setPendingApprovalLoadsLoading] = useState(false)
+  const [pendingApprovalLoadsError, setPendingApprovalLoadsError] = useState<string | null>(null)
   const [pendingAssignment, setPendingAssignment] = useState<{ workOrder: WorkOrder; employee: EmployeeOption } | null>(null)
   const [bulkResults, setBulkResults] = useState<Array<{ workOrder: WorkOrder; success: boolean; partial?: boolean; pendingApproval?: boolean; message: string }> | null>(null)
   const [linkedWorkOrderIds, setLinkedWorkOrderIds] = useState<string[] | null>(null)
@@ -408,12 +417,6 @@ export default function WorkOrderWorkspacePage() {
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [refreshToken])
-
-  useEffect(() => {
-    if (!notice || notice.kind === 'error') return undefined
-    const timer = window.setTimeout(() => setNotice(null), 6500)
-    return () => window.clearTimeout(timer)
-  }, [notice])
 
   const selectedWorkOrder = state.workOrders.find((workOrder) => workOrder.id === selectedId) ?? null
   const activeDepartments = (state.departments ?? []).filter((department) => department.isActive)
@@ -575,6 +578,11 @@ export default function WorkOrderWorkspacePage() {
         if (snapshot.employee.maxTaskLoad != null && snapshot.currentLoad >= snapshot.employee.maxTaskLoad) {
           throw new Error(`${snapshot.employee.employeeName} 已达到最大工作负载（${snapshot.currentLoad}/${snapshot.employee.maxTaskLoad}）。`)
         }
+        const pendingApprovalLoads = await loadPendingAssignmentCounts()
+        const projectedLoad = snapshot.currentLoad + (pendingApprovalLoads.get(snapshot.employee.id) ?? 0)
+        if (snapshot.employee.maxTaskLoad != null && projectedLoad >= snapshot.employee.maxTaskLoad) {
+          throw new Error(`${snapshot.employee.employeeName} 的活动工单与待审批申请已占满容量（${projectedLoad}/${snapshot.employee.maxTaskLoad}）。`)
+        }
         if (snapshot.workOrder.assignedToId) {
           const submission = await submitAssignmentApprovalRequest(snapshot.workOrder, snapshot.employee, note)
           return `负责人变更审批申请已提交${submission.requestNumber ? `（${submission.requestNumber}）` : ''}；审批完成后将自动更新工单。`
@@ -641,6 +649,14 @@ export default function WorkOrderWorkspacePage() {
     if (actionId === 'assign' || actionId === 'priority' || actionId === 'status' || actionId === 'cancel') {
       setPendingAssignment(null)
       setBulkAction(actionId)
+      if (actionId === 'assign') {
+        setPendingApprovalLoadsLoading(true)
+        setPendingApprovalLoadsError(null)
+        void loadPendingAssignmentCounts()
+          .then((counts) => setPendingApprovalLoads(counts))
+          .catch((error: unknown) => setPendingApprovalLoadsError(error instanceof Error ? error.message : '读取待审批负责人申请失败。'))
+          .finally(() => setPendingApprovalLoadsLoading(false))
+      }
     }
   }
 
@@ -648,6 +664,12 @@ export default function WorkOrderWorkspacePage() {
     setSelectedWorkOrderKeys([])
     setPendingAssignment({ workOrder, employee })
     setBulkAction('assign')
+    setPendingApprovalLoadsLoading(true)
+    setPendingApprovalLoadsError(null)
+    void loadPendingAssignmentCounts()
+      .then((counts) => setPendingApprovalLoads(counts))
+      .catch((error: unknown) => setPendingApprovalLoadsError(error instanceof Error ? error.message : '读取待审批负责人申请失败。'))
+      .finally(() => setPendingApprovalLoadsLoading(false))
   }
 
   const executeBatchAction = async (input: WorkOrderBatchActionInput) => {
@@ -655,9 +677,19 @@ export default function WorkOrderWorkspacePage() {
     setBusy(true)
     const results: Array<{ workOrder: WorkOrder; success: boolean; partial?: boolean; pendingApproval?: boolean; message: string }> = []
     let workloadState = state
-    let pendingApprovalCount = 0
+    const additionalLoadByEmployee = new Map<string, number>()
+    let pendingLoadByEmployee = new Map<string, number>()
     try {
       let snapshotError: unknown = null
+      if (input.action === 'assign') {
+        try {
+          pendingLoadByEmployee = await loadPendingAssignmentCounts()
+          setPendingApprovalLoads(pendingLoadByEmployee)
+          setPendingApprovalLoadsError(null)
+        } catch (error) {
+          snapshotError = error
+        }
+      }
       if (input.action !== 'assign') {
         try {
           workloadState = await loadWorkOrderStateFromDataverse()
@@ -687,12 +719,18 @@ export default function WorkOrderWorkspacePage() {
             if (!snapshot.employee.isActive || !snapshot.employee.isAvailableForOrder) {
               throw new Error('目标员工当前不可接单。')
             }
-            if (snapshot.employee.maxTaskLoad != null && snapshot.currentLoad + pendingApprovalCount >= snapshot.employee.maxTaskLoad) {
-              throw new Error(`${snapshot.employee.employeeName} 已达到最大工作负载或已有待审批申请占用容量（${snapshot.currentLoad + pendingApprovalCount}/${snapshot.employee.maxTaskLoad}）。`)
+            if (![WORK_ORDER_STATUS.new, WORK_ORDER_STATUS.assigned, WORK_ORDER_STATUS.inProgress, WORK_ORDER_STATUS.onHold].includes(snapshot.workOrder.status)) {
+              throw new Error('当前工单状态不允许派发或转派。')
+            }
+            const additionalLoad = additionalLoadByEmployee.get(requestedEmployeeId) ?? 0
+            const pendingLoad = pendingLoadByEmployee.get(requestedEmployeeId) ?? 0
+            const projectedLoad = snapshot.currentLoad + pendingLoad + additionalLoad
+            if (snapshot.employee.maxTaskLoad != null && projectedLoad >= snapshot.employee.maxTaskLoad) {
+              throw new Error(`${snapshot.employee.employeeName} 已达到最大工作负载或待审批申请占用容量（${projectedLoad}/${snapshot.employee.maxTaskLoad}，当前 ${snapshot.currentLoad} + 待审批 ${pendingLoad} + 本批次 ${additionalLoad}）。`)
             }
             if (snapshot.workOrder.assignedToId) {
               const submission = await submitAssignmentApprovalRequest(snapshot.workOrder, snapshot.employee, input.note)
-              pendingApprovalCount += 1
+              additionalLoadByEmployee.set(requestedEmployeeId, additionalLoad + 1)
               results.push({
                 workOrder: latestWorkOrder,
                 success: true,
@@ -754,31 +792,37 @@ export default function WorkOrderWorkspacePage() {
         { id: 'overview', path: 'overview', label: '概览', icon: '⌂' },
         { id: 'work-orders', path: 'work-orders', label: '工单管理', icon: '▣', badge: stats.total },
         { id: 'dispatch', path: 'dispatch', label: '派发看板', icon: '↗', badge: stats.new },
-        { id: 'resources', path: 'resources', label: '资源目录', icon: '◉' },
+        { id: 'approvals', path: 'approvals', label: '负责人申请', icon: '✓' },
+        { id: 'resources', path: 'resources', label: '资源目录', icon: '◉', children: [
+          { id: 'resource-employees', path: 'resources/employees', label: '员工', badge: state.employees?.length ?? 0 },
+          { id: 'resource-departments', path: 'resources/departments', label: '部门', badge: state.departments?.length ?? 0 },
+          { id: 'resource-categories', path: 'resources/categories', label: '服务类别', badge: state.serviceCategories?.length ?? 0 },
+        ] },
       ] }]}
-      activePath={view === '概览' ? 'overview' : view === '工单管理' ? 'work-orders' : view === '派发看板' ? 'dispatch' : 'resources'} collapsed={sidebarCollapsed}
-      onNavigate={(path) => setView(path === 'resources' ? '资源目录' : path === 'dispatch' ? '派发看板' : path === 'work-orders' ? '工单管理' : '概览')}
+      activePath={view === '概览' ? 'overview' : view === '工单管理' ? 'work-orders' : view === '派发看板' ? 'dispatch' : view === '资源目录' ? `resources/${resourceTab}` : 'approvals'} collapsed={sidebarCollapsed}
+      onNavigate={(path) => {
+        if (path === 'resources') {
+          setResourceTab('employees')
+          setView('资源目录')
+        } else if (path === 'resources/employees' || path === 'resources/departments' || path === 'resources/categories') {
+          setResourceTab(path.slice('resources/'.length) as ResourceTab)
+          setView('资源目录')
+        } else {
+          setView(path === 'dispatch' ? '派发看板' : path === 'work-orders' ? '工单管理' : path === 'approvals' ? '负责人申请' : '概览')
+        }
+      }}
       brand={<div className="brand-lockup"><div className="brand-mark"><span /><span /><span /><span /></div><div><strong>opsdesk</strong><small>OPERATIONS WORKBENCH</small></div></div>}
       workspace={<div className="workspace-switch"><div className="workspace-avatar">IT</div><div><span>工作区</span><strong>IT 服务运营</strong></div><span className="switch-caret">⌄</span></div>}
       footer={<div className="profile-card"><div className="profile-avatar">A</div><div><strong>Code Apps 用户</strong><span>Dataverse 当前身份</span></div></div>}
     />}
     header={<AppHeader breadcrumbs={<div className="breadcrumbs"><span>工作台</span><b>/</b><strong>{view}</strong></div>}
-      actions={<div className="topbar-actions"><span className="environment-chip"><i />Dataverse</span><Avatar small name="A" /></div>} />}
+      actions={<div className="topbar-actions"><Avatar small name="A" /></div>} />}
   >
-      <div className="demo-banner"><span className="demo-indicator">◉</span><span><strong>Dataverse 在线数据</strong> · 六张业务表通过 Code Apps 数据连接读取；工单操作遵循当前 Dataverse 权限。</span>
-        <div className="demo-banner-actions">
-          <button className="seed-data-trigger" type="button" onClick={() => setSeedDialogOpen(true)} disabled={loading || busy}>添加 IT 演练数据</button>
-          <button type="button" onClick={() => setRefreshToken((value) => value + 1)} disabled={loading || busy}>{loading ? '读取中…' : '重新读取'}</button>
-        </div>
-      </div>
-
       {!loading && state.readWarnings && state.readWarnings.length > 0 && <div className="dataverse-read-warning" role="status">
         <strong>部分辅助数据源读取失败：</strong> {state.readWarnings.join(' ')}
       </div>}
       {error && state.workOrders.length > 0 && <div className="dataverse-read-warning warning-error" role="alert"><strong>刷新失败：</strong> {error}</div>}
-      {notice && <div className={`operation-notice notice-${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>
-        <span>{notice.kind === 'success' ? '✓' : '!'}</span><p>{notice.message}</p><button className="icon-button" aria-label="关闭提示" onClick={() => setNotice(null)}>×</button>
-      </div>}
+      {notice && <Toast kind={notice.kind} message={notice.message} onDismiss={() => setNotice(null)} />}
       {bulkResults && <section className="bulk-results" role={bulkResults.some((item) => !item.success) ? 'alert' : 'status'} aria-label="批量操作结果">
         <header><div><strong>批量操作结果</strong><span>{bulkResults.filter((item) => item.success && !item.pendingApproval).length} 已执行 · {bulkResults.filter((item) => item.pendingApproval).length} 待审批 · {bulkResults.filter((item) => !item.success && !item.partial).length} 失败 · {bulkResults.filter((item) => item.partial).length} 部分成功</span></div>
           <button className="icon-button" type="button" aria-label="关闭批量操作结果" onClick={dismissBulkResults}>×</button></header>
@@ -788,16 +832,14 @@ export default function WorkOrderWorkspacePage() {
       </section>}
 
       <PageContainer eyebrow="SERVICE OPERATIONS" title={view}
-        description={view === '概览' ? '查看工单规模、SLA 风险、工程师负载与处理趋势。' : view === '工单管理' ? '管理工单字段、跨记录操作和业务历史。' : view === '派发看板' ? '按实时工作负载和接单状态安排工程师任务。' : '核对员工、部门与服务类别的当前 Dataverse 字段。'}
-        actions={(view === '概览' || view === '工单管理') && <button className="button button-primary create-button" disabled={busy || activeDepartments.length === 0 || activeCategories.length === 0}
-          title={activeDepartments.length === 0 || activeCategories.length === 0 ? '需要有效的部门和服务类别记录' : undefined}
-          onClick={() => { setSelectedId(null); openDialog('create') }}><span className="plus-mark">＋</span>新建工单</button>}>
-        <nav className="workbench-view-tabs" aria-label="工单工作区视图">
-          {(['概览', '工单管理', '派发看板', '资源目录'] as const).map((item) => <button key={item} type="button" className={view === item ? 'view-tab view-tab-active' : 'view-tab'} aria-current={view === item ? 'page' : undefined} onClick={() => setView(item)}>
-            <span>{item === '概览' ? '⌂' : item === '工单管理' ? '▤' : item === '派发看板' ? '↗' : '◉'}</span>{item}
-            {item === '派发看板' && <small>{stats.new}</small>}
-          </button>)}
-        </nav>
+        description={view === '概览' ? '查看工单规模、SLA 风险、工程师负载与处理趋势。' : view === '工单管理' ? '管理工单字段、跨记录操作和业务历史。' : view === '派发看板' ? '按实时工作负载和接单状态安排工程师任务。' : view === '负责人申请' ? '集中查看负责人变更申请、审批状态和处理结果。' : '核对员工、部门与服务类别的当前 Dataverse 字段。'}
+        actions={<div className="page-header-actions">
+          <button className="button button-quiet" type="button" onClick={() => setRefreshToken((value) => value + 1)} disabled={loading || busy}>{loading ? '读取中…' : '重新读取'}</button>
+          <button className="button button-quiet seed-data-trigger" type="button" onClick={() => setSeedDialogOpen(true)} disabled={loading || busy}>添加 IT 演练数据</button>
+          {(view === '概览' || view === '工单管理') && <button className="button button-primary create-button" disabled={busy || activeDepartments.length === 0 || activeCategories.length === 0}
+            title={activeDepartments.length === 0 || activeCategories.length === 0 ? '需要有效的部门和服务类别记录' : undefined}
+            onClick={() => { setSelectedId(null); openDialog('create') }}><span className="plus-mark">＋</span>新建工单</button>}
+        </div>}>
 
         {view === '概览' && <WorkOrderOperationsDashboard loading={loading} error={error}
           onRetry={() => setRefreshToken((value) => value + 1)} workOrders={state.workOrders} employees={state.employees ?? []}
@@ -843,18 +885,21 @@ export default function WorkOrderWorkspacePage() {
               onRowClick={(workOrder) => setSelectedId(workOrder.id)} sort={sort} onSortChange={(nextSort) => { setSort(nextSort); setPage(1) }} />
             <footer className="table-footer work-order-table-footer"><span>显示 <strong>{visibleWorkOrders.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, visibleWorkOrders.length)}</strong> / {visibleWorkOrders.length}</span>
               <Pagination page={page} pageSize={pageSize} total={visibleWorkOrders.length} loading={loading}
-                pageSizeOptions={[10, 25, 50]} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />
+                pageSizeOptions={[10, 20, 50]} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />
               <span className="demo-pagination">当前身份可读取 {state.workOrders.length} 条工单</span>
             </footer>
           </section>
         </>}
         {view === '派发看板' && <WorkOrderDispatchBoard workOrders={state.workOrders} employees={state.employees ?? []}
           onRequestAssignment={requestDragAssignment} onOpenWorkOrder={(workOrder) => setSelectedId(workOrder.id)} />}
-        {view === '资源目录' && <ResourceDirectory state={state} tab={resourceTab} query={resourceSearch} loading={loading} onTabChange={setResourceTab}
+        {view === '负责人申请' && <AssignmentApprovalRequestsPage active refreshToken={refreshToken}
+          onRefresh={() => setRefreshToken((value) => value + 1)}
+          onOpenWorkOrder={(workOrderId) => { setSelectedId(workOrderId); setView('工单管理') }} />}
+        {view === '资源目录' && <ResourceDirectory state={state} tab={resourceTab} query={resourceSearch} loading={loading}
           onQueryChange={setResourceSearch} onEditResource={(resource) => { setDialogError(null); setResourceEditor(resource) }} />}
       </PageContainer>
 
-    {selectedWorkOrder && <WorkOrderDetail key={selectedWorkOrder.id} workOrder={selectedWorkOrder} state={state} disabled={busy}
+    {selectedWorkOrder && <WorkOrderDetail key={`${selectedWorkOrder.id}-${refreshToken}`} workOrder={selectedWorkOrder} state={state} disabled={busy}
       onClose={() => setSelectedId(null)} onEdit={() => openDialog('edit')} onAssign={() => openDialog('assign')}
       onUnassign={() => openDialog('unassign')} onChangeStatus={() => openDialog('status')} />}
 
@@ -869,6 +914,7 @@ export default function WorkOrderWorkspacePage() {
       onClose={() => !busy && setDialog(null)} onSubmit={submitStatus} />
     <WorkOrderBatchActionDialog open={bulkAction !== null} action={bulkAction} workOrders={assignmentCandidates}
       allWorkOrders={state.workOrders} employees={batchEligibleEmployees} busy={busy} error={null}
+      pendingApprovalLoads={pendingApprovalLoads} pendingApprovalLoadsLoading={pendingApprovalLoadsLoading} pendingApprovalLoadsError={pendingApprovalLoadsError}
       lockedEmployee={pendingAssignment?.employee} onClose={() => { if (!busy) { setBulkAction(null); setPendingAssignment(null) } }} onSubmit={executeBatchAction} />
     <ResourceEditDialog resource={resourceEditor} employees={state.employees ?? []} departments={state.departments ?? []}
       busy={busy} error={dialogError} onClose={() => { if (!busy) { setResourceEditor(null); setDialogError(null) } }} onSubmit={submitResourceEdit} />

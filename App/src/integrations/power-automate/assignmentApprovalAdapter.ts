@@ -17,6 +17,21 @@ function normalizeId(id: string, label: string): string {
   return normalized
 }
 
+function firstText(...values: unknown[]): string | null {
+  return values.find((value): value is string => typeof value === 'string' && value.trim().length > 0)?.trim() ?? null
+}
+
+function isExplicitFailure(value: string | null): boolean {
+  return value !== null && (['failed', 'failure', 'error', 'rejected'].includes(value.toLocaleLowerCase())
+    || /(失败|错误|拒绝|未提交|未创建|未成功|failure|failed|error|rejected|unsuccessful|not\s+(submitted|created|successful))/i.test(value))
+}
+
+function hasSubmissionSuccess(resultValue: string | null, message: string | null, requestId: string | null): boolean {
+  if (isExplicitFailure(resultValue) || isExplicitFailure(message)) return false
+  if (requestId) return true
+  return [resultValue, message].some((value) => Boolean(value && /(已提交|提交成功|成功提交|已创建|创建成功|成功创建|pending|submitted|created|success|succeeded|^ok$)/i.test(value)))
+}
+
 export async function submitAssignmentApprovalRequest(
   workOrder: WorkOrder,
   employee: EmployeeOption,
@@ -44,17 +59,21 @@ export async function submitAssignmentApprovalRequest(
     throw new Error(`提交负责人变更审批失败：${message}`)
   }
 
-  const response = result.data
-  if (!response.requestid) {
-    throw new Error(response.message || 'Flow 未返回审批申请 ID；请检查 Power Automate 的“响应 Power Apps 或流”步骤。')
-  }
-  if (response.result && !['pending', 'submitted', 'success'].includes(response.result.toLowerCase())) {
-    throw new Error(response.message || `Flow 返回未预期结果：${response.result}`)
+  const response = result.data as typeof result.data & Record<string, unknown>
+  const requestId = firstText(response.requestid, response.requestId, response.requestID, response.id)
+  const requestNumber = firstText(response.requestnumber, response.requestNumber)
+  const resultValue = firstText(response.result, response.status, response.outcome)
+  const message = firstText(response.message, response.Message)
+  if (!hasSubmissionSuccess(resultValue, message, requestId)) {
+    throw new Error(message || `Flow 返回未预期结果：${resultValue ?? '空响应'}`)
   }
 
   return {
-    requestId: response.requestid,
-    requestNumber: response.requestnumber ?? '',
-    message: response.message ?? '负责人变更审批申请已提交。',
+    // The request row is the source of truth. Some existing flows return only a
+    // success message, so an empty ID must not turn an already-created request
+    // into a false failure in the Code App.
+    requestId: requestId ?? '',
+    requestNumber: requestNumber ?? '',
+    message: message ?? '负责人变更审批申请已提交。',
   }
 }
