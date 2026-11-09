@@ -280,3 +280,88 @@ export const REPLENISHMENT_URGENCY_LABELS: Record<ReplenishmentUrgency, string> 
   high: '优先',
   medium: '常规',
 }
+
+export type PurchaseOrderStatus = 'draft' | 'submitted' | 'approved' | 'received' | 'cancelled'
+
+export interface PurchaseOrderLine {
+  itemId: string
+  sku: string
+  itemName: string
+  quantity: number
+  unit: string
+  unitCost: number
+  lineAmount: number
+  location: string
+  urgency: ReplenishmentUrgency
+}
+
+export interface PurchaseOrder {
+  id: string
+  number: string
+  status: PurchaseOrderStatus
+  requester: string
+  createdAt: string
+  updatedAt: string
+  notes: string
+  lines: PurchaseOrderLine[]
+  totalAmount: number
+  totalQuantity: number
+}
+
+export const PURCHASE_ORDER_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
+  draft: '草稿',
+  submitted: '已提交',
+  approved: '已批准',
+  received: '已收货入库',
+  cancelled: '已取消',
+}
+
+/** Absolute quantity variance that requires explicit confirmation before posting. */
+export const STOCKTAKE_VARIANCE_THRESHOLD = 2
+
+export interface StocktakeVarianceLine {
+  itemId: string
+  sku: string
+  itemName: string
+  systemQuantity: number
+  countedQuantity: number
+  variance: number
+  unit: string
+  overThreshold: boolean
+}
+
+export function analyzeStocktakeVariance(
+  session: StocktakeSession,
+  threshold = STOCKTAKE_VARIANCE_THRESHOLD,
+): {
+  pendingCount: number
+  totalAbsVariance: number
+  overThreshold: StocktakeVarianceLine[]
+  withinThreshold: StocktakeVarianceLine[]
+  allLines: StocktakeVarianceLine[]
+} {
+  const pendingCount = session.lines.filter((line) => line.countedQuantity == null).length
+  const allLines: StocktakeVarianceLine[] = session.lines
+    .filter((line) => line.countedQuantity != null)
+    .map((line) => {
+      const countedQuantity = line.countedQuantity as number
+      const variance = countedQuantity - line.systemQuantity
+      return {
+        itemId: line.itemId,
+        sku: line.sku,
+        itemName: line.itemName,
+        systemQuantity: line.systemQuantity,
+        countedQuantity,
+        variance,
+        unit: line.unit,
+        overThreshold: Math.abs(variance) > threshold,
+      }
+    })
+  return {
+    pendingCount,
+    totalAbsVariance: allLines.reduce((sum, line) => sum + Math.abs(line.variance), 0),
+    overThreshold: allLines.filter((line) => line.overThreshold),
+    withinThreshold: allLines.filter((line) => !line.overThreshold),
+    allLines,
+  }
+}

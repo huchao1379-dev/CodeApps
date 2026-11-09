@@ -22,6 +22,7 @@ import {
   type InventoryReceiveInput,
   type InventoryReserveInput,
   type InventoryTransferInput,
+  type PurchaseOrder,
   type ReplenishmentSuggestion,
   type StocktakeSession,
 } from '../types/inventory.types'
@@ -32,6 +33,7 @@ export interface InventoryStoreState {
   locations: InventoryLocation[]
   batches: InventoryBatch[]
   stocktakes: StocktakeSession[]
+  purchaseOrders: PurchaseOrder[]
 }
 
 function cloneInitialState(): InventoryStoreState {
@@ -47,6 +49,7 @@ function cloneInitialState(): InventoryStoreState {
       ...session,
       lines: session.lines.map((line) => ({ ...line })),
     })),
+    purchaseOrders: [],
   }
 }
 
@@ -769,4 +772,91 @@ export function findItemBySku(state: InventoryStoreState, skuOrCode: string) {
     || item.id.toLocaleLowerCase() === normalized
     || item.name.toLocaleLowerCase() === normalized
   )) ?? null
+}
+
+export function createPurchaseOrderFromSuggestions(
+  state: InventoryStoreState,
+  itemIds: string[],
+  requester = '库存管理员',
+  notes = '',
+): InventoryStoreState {
+  const selected = new Set(itemIds)
+  const suggestions = buildReplenishmentSuggestions(state).filter((row) => selected.has(row.itemId))
+  if (suggestions.length === 0) throw new Error('请至少选择一条补货建议。')
+
+  const lines = suggestions.map((row) => {
+    const unitCost = estimateUnitCost(row.category)
+    return {
+      itemId: row.itemId,
+      sku: row.sku,
+      itemName: row.name,
+      quantity: row.suggestedQty,
+      unit: row.unit,
+      unitCost,
+      lineAmount: row.suggestedQty * unitCost,
+      location: row.location,
+      urgency: row.urgency,
+    }
+  })
+  const stamp = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date()).replaceAll('-', '')
+  const seq = String(state.purchaseOrders.filter((order) => order.number.includes(stamp)).length + 1).padStart(2, '0')
+  const timestamp = nowIso()
+  const order: PurchaseOrder = {
+    id: nextId('po'),
+    number: `PO-${stamp}-${seq}`,
+    status: 'submitted',
+    requester: requester.trim() || '库存管理员',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    notes: notes.trim() || `由补货计划生成，共 ${lines.length} 行`,
+    lines,
+    totalAmount: lines.reduce((sum, line) => sum + line.lineAmount, 0),
+    totalQuantity: lines.reduce((sum, line) => sum + line.quantity, 0),
+  }
+  return { ...state, purchaseOrders: [order, ...state.purchaseOrders] }
+}
+
+export function receivePurchaseOrder(state: InventoryStoreState, orderId: string, operator = '库存管理员'): InventoryStoreState {
+  const order = state.purchaseOrders.find((entry) => entry.id === orderId)
+  if (!order) throw new Error('未找到采购单。')
+  if (order.status === 'received') throw new Error('采购单已收货入库。')
+  if (order.status === 'cancelled') throw new Error('已取消采购单不可收货。')
+
+  let next = state
+  order.lines.forEach((line) => {
+    next = receiveInventory(next, {
+      itemId: line.itemId,
+      quantity: line.quantity,
+      reason: `采购单 ${order.number} 收货入库`,
+      operator: operator.trim() || order.requester,
+    })
+  })
+
+  return {
+    ...next,
+    purchaseOrders: next.purchaseOrders.map((entry) => (
+      entry.id === orderId
+        ? { ...entry, status: 'received', updatedAt: nowIso() }
+        : entry
+    )),
+  }
+}
+
+export function cancelPurchaseOrder(state: InventoryStoreState, orderId: string): InventoryStoreState {
+  const order = state.purchaseOrders.find((entry) => entry.id === orderId)
+  if (!order) throw new Error('未找到采购单。')
+  if (order.status === 'received') throw new Error('已收货采购单不可取消。')
+  return {
+    ...state,
+    purchaseOrders: state.purchaseOrders.map((entry) => (
+      entry.id === orderId
+        ? { ...entry, status: 'cancelled', updatedAt: nowIso() }
+        : entry
+    )),
+  }
 }

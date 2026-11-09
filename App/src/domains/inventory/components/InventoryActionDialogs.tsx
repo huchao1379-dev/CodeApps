@@ -516,4 +516,145 @@ export function InventoryQuickPickDialog({
   </ModalShell>
 }
 
+export function InventoryCreatePurchaseOrderDialog({
+  open,
+  selectedCount,
+  totalQuantity,
+  totalAmount,
+  busy,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean
+  selectedCount: number
+  totalQuantity: number
+  totalAmount: number
+  busy: boolean
+  error: string | null
+  onClose: () => void
+  onSubmit: (payload: { requester: string; notes: string }) => void
+}) {
+  const [requester, setRequester] = useState('库存管理员')
+  const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    setRequester('库存管理员')
+    setNotes(`补货计划一键生成，共 ${selectedCount} 项`)
+  }, [open, selectedCount])
+
+  if (!open) return null
+
+  const amountText = new Intl.NumberFormat('zh-CN', {
+    style: 'currency', currency: 'CNY', maximumFractionDigits: 0,
+  }).format(totalAmount)
+
+  return <ModalShell title="生成采购单" subtitle="将选中补货建议汇总为 mock 采购单（库存域独立，不关联工单）" onClose={onClose}>
+    <form className="form-stack" onSubmit={(event) => {
+      event.preventDefault()
+      onSubmit({ requester: requester.trim() || '库存管理员', notes: notes.trim() })
+    }}>
+      <div className="modal-content">
+        <p className="inventory-dialog-summary">
+          已选 <strong>{selectedCount}</strong> 项
+          · 合计数量 <strong>{totalQuantity}</strong>
+          · 预估金额 <strong>{amountText}</strong>
+        </p>
+        <label>申请人
+          <input maxLength={40} value={requester} onChange={(event) => setRequester(event.target.value)} />
+        </label>
+        <label>备注
+          <textarea rows={3} maxLength={300} value={notes} onChange={(event) => setNotes(event.target.value)} />
+        </label>
+        {error && <p className="form-error" role="alert">{error}</p>}
+      </div>
+      <footer className="modal-footer">
+        <button className="button button-quiet" type="button" disabled={busy} onClick={onClose}>取消</button>
+        <button className="button button-primary" type="submit" disabled={busy || selectedCount === 0}>
+          {busy ? '生成中…' : '确认生成'}
+        </button>
+      </footer>
+    </form>
+  </ModalShell>
+}
+
+export function InventoryStocktakePostDialog({
+  open,
+  sessionNumber,
+  threshold,
+  pendingCount,
+  overThreshold,
+  withinCount,
+  totalAbsVariance,
+  busy,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  sessionNumber: string
+  threshold: number
+  pendingCount: number
+  overThreshold: Array<{ sku: string; itemName: string; variance: number; unit: string }>
+  withinCount: number
+  totalAbsVariance: number
+  busy: boolean
+  error: string | null
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const [acknowledged, setAcknowledged] = useState(false)
+  const blocked = pendingCount > 0
+  const needsAck = overThreshold.length > 0
+
+  useEffect(() => {
+    if (!open) return
+    setAcknowledged(false)
+  }, [open])
+
+  if (!open) return null
+
+  return <ModalShell title="确认盘点过账" subtitle={`${sessionNumber} · 差异绝对值阈值 ${threshold}`} onClose={onClose}>
+    <div className="form-stack">
+      <div className="modal-content">
+        <p className="inventory-dialog-summary">
+          差异合计绝对值 <strong>{totalAbsVariance}</strong>
+          · 阈值内 <strong>{withinCount}</strong> 项
+          · 超阈值 <strong>{overThreshold.length}</strong> 项
+          · 未录入 <strong>{pendingCount}</strong> 项
+        </p>
+        {blocked && <p className="form-error" role="alert">仍有物资未录入实盘，无法过账。</p>}
+        {!blocked && needsAck && <>
+          <p className="inventory-notes">以下差异超过阈值，需勾选确认后才能过账：</p>
+          <ul className="inventory-confirm-list">
+            {overThreshold.map((line) => <li key={line.sku}>
+              <strong>{line.itemName}</strong>
+              <span className="inventory-mono">{line.sku}</span>
+              <span className={line.variance > 0 ? 'inventory-variance-pos' : 'inventory-variance-neg'}>
+                {line.variance > 0 ? `+${line.variance}` : line.variance}{line.unit}
+              </span>
+            </li>)}
+          </ul>
+          <label className="inventory-confirm-check">
+            <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
+            我已核对超阈值差异，确认过账调整账面
+          </label>
+        </>}
+        {!blocked && !needsAck && <p className="inventory-notes">全部差异均在阈值内，可直接过账。</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
+      </div>
+      <footer className="modal-footer">
+        <button className="button button-quiet" type="button" disabled={busy} onClick={onClose}>取消</button>
+        <button
+          className="button button-primary"
+          type="button"
+          disabled={busy || blocked || (needsAck && !acknowledged)}
+          onClick={onConfirm}
+        >{busy ? '过账中…' : '确认过账'}</button>
+      </footer>
+    </div>
+  </ModalShell>
+}
+
 export type { StockActionKind }

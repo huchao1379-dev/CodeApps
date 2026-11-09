@@ -23,11 +23,13 @@ import {
 import { InventoryAlertsView } from '../components/InventoryAlertsView'
 import {
   InventoryBulkTransferDialog,
+  InventoryCreatePurchaseOrderDialog,
   InventoryItemFormDialog,
   InventoryQuickPickDialog,
   InventoryScanDialog,
   InventoryStartStocktakeDialog,
   InventoryStockActionDialog,
+  InventoryStocktakePostDialog,
   type StockActionKind,
 } from '../components/InventoryActionDialogs'
 import { InventoryBatchesView } from '../components/InventoryBatchesView'
@@ -44,14 +46,17 @@ import {
   buildInventoryAlerts,
   buildReplenishmentSuggestions,
   bulkTransferInventory,
+  cancelPurchaseOrder,
   createInventoryItem,
   createInventoryStoreState,
+  createPurchaseOrderFromSuggestions,
   findItemBySku,
   issueInventory,
   markStocktakeReview,
   movementsForItem,
   postStocktake,
   receiveInventory,
+  receivePurchaseOrder,
   releaseInventoryReserve,
   reserveInventory,
   resetInventoryStoreState,
@@ -67,6 +72,8 @@ import {
   INVENTORY_BATCH_STATUS_LABELS,
   INVENTORY_MOVEMENT_LABELS,
   INVENTORY_STATUS_LABELS,
+  STOCKTAKE_VARIANCE_THRESHOLD,
+  analyzeStocktakeVariance,
   availableQuantity,
   type InventoryItem,
   type InventoryItemInput,
@@ -166,6 +173,9 @@ export function InventoryWorkspacePanel({
   const [quickPickKind, setQuickPickKind] = useState<StockActionKind | null>(null)
   const [stocktakeDialogOpen, setStocktakeDialogOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
+  const [purchaseOrderDialogOpen, setPurchaseOrderDialogOpen] = useState(false)
+  const [purchaseOrderItemIds, setPurchaseOrderItemIds] = useState<string[]>([])
+  const [stocktakePostSessionId, setStocktakePostSessionId] = useState<string | null>(null)
 
   useEffect(() => {
     if (createRequestToken <= 0) return
@@ -715,6 +725,56 @@ export function InventoryWorkspacePanel({
         setStocktakeDialogOpen(false)
       }}
     />
+    <InventoryCreatePurchaseOrderDialog
+      open={purchaseOrderDialogOpen}
+      selectedCount={purchaseOrderItemIds.length}
+      totalQuantity={replenishmentSuggestions
+        .filter((row) => purchaseOrderItemIds.includes(row.itemId))
+        .reduce((sum, row) => sum + row.suggestedQty, 0)}
+      totalAmount={replenishmentSuggestions
+        .filter((row) => purchaseOrderItemIds.includes(row.itemId))
+        .reduce((sum, row) => sum + row.estimatedCost, 0)}
+      busy={busy}
+      error={dialogError}
+      onClose={() => { setPurchaseOrderDialogOpen(false); setDialogError(null) }}
+      onSubmit={(payload) => {
+        applyStoreChange(
+          (current) => createPurchaseOrderFromSuggestions(
+            current,
+            purchaseOrderItemIds,
+            payload.requester,
+            payload.notes,
+          ),
+          `已生成采购单（${purchaseOrderItemIds.length} 行）`,
+        )
+        setPurchaseOrderDialogOpen(false)
+        setPurchaseOrderItemIds([])
+      }}
+    />
+    {(() => {
+      const postSession = store.stocktakes.find((session) => session.id === stocktakePostSessionId) ?? null
+      const postAnalysis = postSession ? analyzeStocktakeVariance(postSession) : null
+      return <InventoryStocktakePostDialog
+        open={Boolean(postSession && postAnalysis)}
+        sessionNumber={postSession?.number ?? ''}
+        threshold={STOCKTAKE_VARIANCE_THRESHOLD}
+        pendingCount={postAnalysis?.pendingCount ?? 0}
+        overThreshold={postAnalysis?.overThreshold ?? []}
+        withinCount={postAnalysis?.withinThreshold.length ?? 0}
+        totalAbsVariance={postAnalysis?.totalAbsVariance ?? 0}
+        busy={busy}
+        error={dialogError}
+        onClose={() => { setStocktakePostSessionId(null); setDialogError(null) }}
+        onConfirm={() => {
+          if (!stocktakePostSessionId) return
+          applyStoreChange(
+            (current) => postStocktake(current, stocktakePostSessionId, '库存管理员'),
+            '盘点差异已过账到台账',
+          )
+          setStocktakePostSessionId(null)
+        }}
+      />
+    })()}
   </>
 
   if (view === 'overview') {
@@ -1039,6 +1099,7 @@ export function InventoryWorkspacePanel({
       <InventoryReplenishView
         suggestions={replenishmentSuggestions}
         items={store.items}
+        purchaseOrders={store.purchaseOrders}
         onReceive={(item) => openStockAction(item, 'receive')}
         onReceiveSuggested={(item, quantity) => {
           applyStoreChange(
@@ -1052,6 +1113,20 @@ export function InventoryWorkspacePanel({
           )
         }}
         onOpenItem={(item) => openEdit(item)}
+        onCreatePurchaseOrder={(itemIds) => {
+          setPurchaseOrderItemIds(itemIds)
+          setDialogError(null)
+          setPurchaseOrderDialogOpen(true)
+        }}
+        onReceivePurchaseOrder={(orderId) => {
+          applyStoreChange(
+            (current) => receivePurchaseOrder(current, orderId, '库存管理员'),
+            '采购单已收货并写入入库流水',
+          )
+        }}
+        onCancelPurchaseOrder={(orderId) => {
+          applyStoreChange((current) => cancelPurchaseOrder(current, orderId), '采购单已取消')
+        }}
       />
     </section>
   }
@@ -1104,8 +1179,9 @@ export function InventoryWorkspacePanel({
         onSubmitReview={(sessionId) => {
           applyStoreChange((current) => markStocktakeReview(current, sessionId), '盘点已提交复核')
         }}
-        onPost={(sessionId) => {
-          applyStoreChange((current) => postStocktake(current, sessionId, '库存管理员'), '盘点差异已过账到台账')
+        onRequestPost={(sessionId) => {
+          setDialogError(null)
+          setStocktakePostSessionId(sessionId)
         }}
       />
     </>

@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
+  DataTable,
   DetailPanel,
-  EmptyState,
   FilterBar,
+  Pagination,
   SearchInput,
   StatusBadge,
   type FilterDefinition,
+  type TableColumn,
 } from '../../../shared/components'
 import {
   INVENTORY_BATCH_STATUS_LABELS,
@@ -34,6 +36,8 @@ function daysUntilExpiry(expiresAt: string | null) {
   return Math.ceil(diff / (24 * 60 * 60 * 1000))
 }
 
+const PAGE_SIZE_OPTIONS = [8, 16, 32]
+
 export function InventoryBatchesView({
   batches,
   items,
@@ -54,6 +58,8 @@ export function InventoryBatchesView({
   const [statusFilter, setStatusFilter] = useState('all')
   const [locationFilter, setLocationFilter] = useState('all')
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(8)
 
   const filtered = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase()
@@ -65,6 +71,22 @@ export function InventoryBatchesView({
         .some((value) => value.toLocaleLowerCase().includes(normalized))
     })
   }, [batches, search, statusFilter, locationFilter])
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter, locationFilter])
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filtered.length / pageSize))
+    if (page > maxPage) setPage(maxPage)
+  }, [filtered.length, page, pageSize])
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const pageRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filtered.slice(start, start + pageSize)
+  }, [filtered, currentPage, pageSize])
 
   const selectedBatch = batches.find((batch) => batch.id === selectedBatchId) ?? null
   const selectedItem = selectedBatch
@@ -104,9 +126,86 @@ export function InventoryBatchesView({
     setSearch('')
     setStatusFilter('all')
     setLocationFilter('all')
+    setPage(1)
   }
 
   const hasActiveFilters = Boolean(search.trim()) || statusFilter !== 'all' || locationFilter !== 'all'
+
+  const columns: TableColumn<InventoryBatch>[] = [
+    {
+      key: 'status',
+      title: '状态',
+      width: 88,
+      render: (_, batch) => (
+        <StatusBadge
+          status={batch.status}
+          label={INVENTORY_BATCH_STATUS_LABELS[batch.status]}
+          variant={batchVariant(batch.status)}
+          size="small"
+        />
+      ),
+    },
+    {
+      key: 'lotNumber',
+      title: '批号',
+      width: 160,
+      render: (_, batch) => (
+        <div className="inventory-name-cell">
+          <strong className="inventory-mono">{batch.lotNumber}</strong>
+          <small>{batch.itemName} · {batch.sku}</small>
+        </div>
+      ),
+    },
+    { key: 'location', title: '库位', width: 120 },
+    { key: 'supplier', title: '供应商', width: 120 },
+    {
+      key: 'quantity',
+      title: '在库',
+      width: 80,
+      render: (_, batch) => <strong>{batch.quantity}</strong>,
+    },
+    {
+      key: 'receivedAt',
+      title: '收货',
+      width: 110,
+      render: (_, batch) => formatDate(batch.receivedAt),
+    },
+    {
+      key: 'expiresAt',
+      title: '到期',
+      width: 150,
+      render: (_, batch) => {
+        const days = daysUntilExpiry(batch.expiresAt)
+        let suffix = ''
+        if (days != null && days >= 0 && days <= 30) suffix = `（${days} 天）`
+        if (days != null && days < 0) suffix = `（已过期 ${Math.abs(days)} 天）`
+        return <span>{formatDate(batch.expiresAt)}{suffix}</span>
+      },
+    },
+    {
+      key: 'actions',
+      title: '操作',
+      width: 200,
+      render: (_, batch) => (
+        <div className="inventory-row-actions" onClick={(event) => event.stopPropagation()}>
+          <button
+            className="button button-quiet inventory-mini-button"
+            type="button"
+            onClick={() => setSelectedBatchId(batch.id)}
+          >详情</button>
+          {(batch.status === 'expiring' || batch.status === 'expired') && batch.quantity > 0 && (
+            <button
+              className="button button-primary inventory-mini-button"
+              type="button"
+              onClick={() => onIssuePrefer(batch)}
+            >
+              {batch.status === 'expired' ? '隔离出库' : '临期领用'}
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ]
 
   return <section className="inventory-panel" aria-label="批次效期">
     <div className="inventory-metrics inventory-metrics-compact" role="toolbar" aria-label="批次状态快捷筛选">
@@ -120,7 +219,7 @@ export function InventoryBatchesView({
         key={metric.key}
         type="button"
         className={`inventory-metric-chip inventory-metric-${metric.tone}${statusFilter === metric.key ? ' is-active' : ''}`}
-        onClick={() => setStatusFilter(metric.key)}
+        onClick={() => { setStatusFilter(metric.key); setPage(1) }}
       >
         <span>{metric.label}</span>
         <strong>{metric.value}</strong>
@@ -166,70 +265,33 @@ export function InventoryBatchesView({
         </div>
       </header>
 
-      {filtered.length === 0
-        ? <div className="inventory-empty-pad">
-          <EmptyState
-            title="没有匹配批次"
-            description={hasActiveFilters ? '当前筛选无结果，可清除条件后重试。' : '暂无批次数据。'}
-            action={hasActiveFilters
-              ? <button className="button button-quiet" type="button" onClick={clearFilters}>清除筛选</button>
-              : undefined}
-          />
-        </div>
-        : <div className="inventory-batch-list">
-          {filtered.map((batch) => {
-            const days = daysUntilExpiry(batch.expiresAt)
-            return <button
-              key={batch.id}
-              type="button"
-              className={`inventory-batch-card inventory-batch-card-${batch.status}${selectedBatchId === batch.id ? ' is-selected' : ''}`}
-              onClick={() => setSelectedBatchId(batch.id)}
-            >
-              <div className="inventory-batch-card-head">
-                <div>
-                  <StatusBadge
-                    status={batch.status}
-                    label={INVENTORY_BATCH_STATUS_LABELS[batch.status]}
-                    variant={batchVariant(batch.status)}
-                    size="small"
-                  />
-                  <strong className="inventory-mono">{batch.lotNumber}</strong>
-                  <small>{batch.itemName} · {batch.sku}</small>
-                </div>
-                <div className="inventory-batch-qty">
-                  <strong>{batch.quantity}</strong>
-                  <span>在库</span>
-                </div>
-              </div>
-              <div className="inventory-stocktake-meta">
-                <span>库位 {batch.location}</span>
-                <span>供应商 {batch.supplier}</span>
-                <span>收货 {formatDate(batch.receivedAt)}</span>
-                <span>
-                  到期 {formatDate(batch.expiresAt)}
-                  {days != null && days >= 0 && days <= 30 ? `（${days} 天）` : ''}
-                  {days != null && days < 0 ? `（已过期 ${Math.abs(days)} 天）` : ''}
-                </span>
-              </div>
-              <div className="inventory-row-actions" onClick={(event) => event.stopPropagation()}>
-                <button
-                  className="button button-quiet inventory-mini-button"
-                  type="button"
-                  onClick={() => setSelectedBatchId(batch.id)}
-                >查看详情</button>
-                {(batch.status === 'expiring' || batch.status === 'expired') && batch.quantity > 0 && (
-                  <button
-                    className="button button-primary inventory-mini-button"
-                    type="button"
-                    onClick={() => onIssuePrefer(batch)}
-                  >
-                    {batch.status === 'expired' ? '隔离出库' : '临期优先领用'}
-                  </button>
-                )}
-              </div>
-            </button>
-          })}
-        </div>}
+      <div className="inventory-table-scroll">
+        <DataTable
+          data={pageRows}
+          columns={columns}
+          rowKey={(batch) => batch.id}
+          ariaLabel="批次效期列表"
+          emptyTitle="没有匹配批次"
+          emptyDescription={hasActiveFilters ? '当前筛选无结果，可清除条件后重试。' : '暂无批次数据。'}
+          emptyAction={hasActiveFilters
+            ? <button className="button button-quiet" type="button" onClick={clearFilters}>清除筛选</button>
+            : undefined}
+          onRowClick={(batch) => setSelectedBatchId(batch.id)}
+          selectedRowKeys={selectedBatchId ? [selectedBatchId] : []}
+        />
+      </div>
+
+      {filtered.length > 0 && <footer className="inventory-footer">
+        <span>显示 <strong>{(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)}</strong> / {filtered.length}</span>
+        <Pagination
+          page={currentPage}
+          pageSize={pageSize}
+          total={filtered.length}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+        />
+      </footer>}
     </section>
 
     <DetailPanel
