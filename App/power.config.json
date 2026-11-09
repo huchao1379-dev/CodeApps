@@ -21,6 +21,22 @@
         "workflowDisplayName": "提交负责人变更申请",
         "workflowName": "101b3581-0fe7-679b-6b31-38048e27461a"
       }
+    },
+    "1972f5cd-be21-421c-aaf6-aaa262a00f21": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "displayName": "SharePoint",
+      "dataSources": [
+        "workordermaterials"
+      ],
+      "dataSets": {
+        "https://vyung01.sharepoint.com/sites/ITops": {
+          "dataSources": {
+            "workordermaterials": {
+              "tableName": "WorkOrderMaterials"
+            }
+          }
+        }
+      }
     }
   },
   "databaseReferences": {

@@ -426,6 +426,29 @@ function normalizeRecordId(id: string, label: string): string {
   return normalized
 }
 
+/**
+ * Server-side overdue query via Dataverse $filter.
+ * Demonstrates Code Apps querying beyond client-side snapshot filtering (vs Power Fx delegation limits).
+ */
+export async function loadActiveOverdueWorkOrdersFromDataverse(): Promise<WorkOrder[]> {
+  const now = new Date().toISOString()
+  const filter = [
+    '(statecode eq 0)',
+    '(cr590_expectedcompletiontime ne null)',
+    `(cr590_expectedcompletiontime lt ${now})`,
+    `(cr590_status eq ${WORK_ORDER_STATUS.assigned} or cr590_status eq ${WORK_ORDER_STATUS.inProgress} or cr590_status eq ${WORK_ORDER_STATUS.onHold})`,
+  ].join(' and ')
+
+  const rows = await readAllSourceRows('cr590_workorders', (skipToken) => Cr590_workordersService.getAll({
+    select: WORK_ORDER_SELECT,
+    filter,
+    orderBy: ['cr590_expectedcompletiontime asc'],
+    maxPageSize: PAGE_SIZE,
+    ...(skipToken ? { skipToken } : {}),
+  }))
+  return rows.map((record) => mapWorkOrder(record as WorkOrderRecord))
+}
+
 /** Reads only the target order, employee, and that employee's active workload before assignment. */
 export async function loadWorkOrderAssignmentSnapshot(
   workOrderId: string,

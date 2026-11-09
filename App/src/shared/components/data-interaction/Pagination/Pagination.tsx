@@ -1,7 +1,7 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import type { PaginationProps } from './Pagination.types'
 
-export function Pagination({ page, pageSize, total, hasNextPage, loading = false, pageSizeOptions = [10, 25, 50], onPageChange, onPageSizeChange }: PaginationProps) {
+export function Pagination({ page, pageSize, total, hasNextPage, loading = false, pageSizeOptions = [10, 20, 50], onPageChange, onPageSizeChange }: PaginationProps) {
   const id = useId()
   const [jumpValue, setJumpValue] = useState(String(page))
   useEffect(() => setJumpValue(String(page)), [page])

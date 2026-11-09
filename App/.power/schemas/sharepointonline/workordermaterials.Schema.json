@@ -1,0 +1,896 @@
+{
+  "name": "WorkOrderMaterials",
+  "title": "WorkOrderMaterials",
+  "x-ms-permission": "read-write",
+  "x-ms-capabilities": {
+    "sortRestrictions": {
+      "sortable": true,
+      "unsortableProperties": [
+        "OData__ExtendedDescription",
+        "OData__DisplayName",
+        "{Identifier}",
+        "{IsFolder}",
+        "{Thumbnail}",
+        "{Link}",
+        "{Name}",
+        "{FilenameWithExtension}",
+        "{Path}",
+        "{FullPath}",
+        "{ModerationStatus}",
+        "{ModerationComment}",
+        "{ContentType}",
+        "{IsCheckedOut}",
+        "{DriveId}",
+        "{DriveItemId}",
+        "{SensitivityLabelId}",
+        "{SensitivityLabelName}",
+        "{VersionNumber}",
+        "{TriggerWindowStartToken}",
+        "{TriggerWindowEndToken}"
+      ]
+    },
+    "filterRestrictions": {
+      "filterable": true,
+      "nonFilterableProperties": [
+        "OData__ExtendedDescription",
+        "OData__DisplayName",
+        "{Identifier}",
+        "{IsFolder}",
+        "{Thumbnail}",
+        "{Link}",
+        "{Name}",
+        "{FilenameWithExtension}",
+        "{Path}",
+        "{FullPath}",
+        "{ModerationStatus}",
+        "{ModerationComment}",
+        "{ContentType}",
+        "{IsCheckedOut}",
+        "{DriveId}",
+        "{DriveItemId}",
+        "{SensitivityLabelId}",
+        "{SensitivityLabelName}",
+        "{VersionNumber}",
+        "{TriggerWindowStartToken}",
+        "{TriggerWindowEndToken}"
+      ]
+    },
+    "isOnlyServerPagable": true,
+    "filterFunctionSupport": [
+      "and",
+      "or",
+      "eq",
+      "startswith",
+      "gt",
+      "ge",
+      "lt",
+      "le",
+      "ne"
+    ],
+    "serverPagingOptions": [
+      "top",
+      "skiptoken"
+    ],
+    "odataVersion": 3
+  },
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "ID": {
+          "title": "ID",
+          "description": "列表项 ID。使用此值指定其他列表相关操作的对象。",
+          "type": "integer",
+          "format": "int64",
+          "x-ms-keyType": "primary",
+          "x-ms-keyOrder": 1,
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq"
+            ]
+          }
+        },
+        "Title": {
+          "title": "标题",
+          "type": "string",
+          "x-ms-permission": "read-write",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq",
+              "startswith"
+            ]
+          },
+          "maxLength": 255
+        },
+        "WorkOrderNumber": {
+          "title": "WorkOrderNumber",
+          "type": "string",
+          "x-ms-permission": "read-write",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq",
+              "startswith"
+            ]
+          },
+          "maxLength": 255
+        },
+        "ServiceCategory": {
+          "title": "ServiceCategory",
+          "type": "string",
+          "x-ms-permission": "read-write",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq",
+              "startswith"
+            ]
+          },
+          "maxLength": 255
+        },
+        "MaterialType#Id": {
+          "title": "MaterialType Id",
+          "type": "integer",
+          "format": "int64",
+          "x-ms-permission": "read-only",
+          "x-ms-visibility": "internal"
+        },
+        "MaterialType": {
+          "title": "MaterialType",
+          "type": "object",
+          "x-ms-permission": "read-write",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "x-ms-sp": {
+              "IsChoice": true
+            },
+            "filterFunctions": [
+              "eq"
+            ]
+          },
+          "properties": {
+            "@odata.type": {
+              "title": "@odata.type",
+              "x-ms-visibility": "internal",
+              "type": "string",
+              "x-ms-permission": "read-write"
+            },
+            "Value": {
+              "title": "Value",
+              "type": "string",
+              "x-ms-dynamic-values": {
+                "operationId": "GetEntityValues",
+                "parameters": {
+                  "dataset": {
+                    "parameter": "dataset"
+                  },
+                  "table": {
+                    "parameter": "table"
+                  },
+                  "id": "9445295e-5ade-4072-b91d-35301d0ad4ca"
+                },
+                "value-path": "Value",
+                "value-title": "Value",
+                "value-collection": "value"
+              }
+            },
+            "Id": {
+              "title": "Id",
+              "type": "integer",
+              "format": "int64",
+              "x-ms-visibility": "internal",
+              "x-ms-permission": "read-only"
+            }
+          },
+          "x-ms-displayFormat": {
+            "titleProperty": "Value"
+          }
+        },
+        "Modified": {
+          "title": "修改时间",
+          "description": "上次更改此项目的时间。",
+          "type": "string",
+          "format": "date-time",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq",
+              "gt",
+              "ge",
+              "lt",
+              "le",
+              "ne"
+            ]
+          }
+        },
+        "Editor#Claims": {
+          "title": "修改者 Claims",
+          "type": "string",
+          "description": "上次更改此项目的用户的内部标识符。",
+          "x-ms-permission": "read-only",
+          "x-ms-visibility": "internal"
+        },
+        "Editor": {
+          "title": "修改者",
+          "description": "上次更改此项目的用户。",
+          "type": "object",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq"
+            ]
+          },
+          "properties": {
+            "@odata.type": {
+              "title": "@odata.type",
+              "x-ms-visibility": "internal",
+              "type": "string",
+              "x-ms-permission": "read-only"
+            },
+            "Claims": {
+              "title": "Claims",
+              "type": "string",
+              "description": "上次更改此项目的用户的内部标识符。",
+              "x-ms-permission": "read-only",
+              "x-ms-dynamic-values": {
+                "operationId": "GetEntityValues",
+                "parameters": {
+                  "dataset": {
+                    "parameter": "dataset"
+                  },
+                  "table": {
+                    "parameter": "table"
+                  },
+                  "id": "d31655d1-1d5b-4511-95a1-7a09e9b75bf2"
+                },
+                "value-path": "Claims",
+                "value-title": "DisplayName",
+                "value-collection": "value"
+              }
+            },
+            "DisplayName": {
+              "title": "DisplayName",
+              "type": "string",
+              "description": "上次更改此项目的用户的姓名。",
+              "x-ms-permission": "read-only",
+              "x-ms-capabilities": {
+                "x-ms-sp": {
+                  "OdataQueryName": "Title"
+                },
+                "filterFunctions": [
+                  "eq",
+                  "startswith"
+                ]
+              }
+            },
+            "Email": {
+              "title": "Email",
+              "type": "string",
+              "description": "上次更改此项目的用户的电子邮件地址。",
+              "format": "email",
+              "x-ms-permission": "read-only",
+              "x-ms-capabilities": {
+                "x-ms-sp": {
+                  "OdataQueryName": "EMail"
+                },
+                "filterFunctions": [
+                  "eq",
+                  "startswith"
+                ]
+              }
+            },
+            "Picture": {
+              "title": "Picture",
+              "type": "string",
+              "description": "链接到上次更改此项目的用户的图片。",
+              "format": "uri",
+              "x-ms-media-kind": "image",
+              "x-ms-media-default-folder-path": "/sites/ITops",
+              "x-ms-media-base-url": "https://vyung01.sharepoint.com/sites/ITops",
+              "x-ms-permission": "read-only"
+            },
+            "Department": {
+              "title": "Department",
+              "type": "string",
+              "description": "上次更改此项目的用户的部门名称。",
+              "x-ms-permission": "read-only"
+            },
+            "JobTitle": {
+              "title": "JobTitle",
+              "type": "string",
+              "description": "上次更改此项目的用户的职务。",
+              "x-ms-permission": "read-only"
+            }
+          },
+          "x-ms-displayFormat": {
+            "titleProperty": "DisplayName",
+            "subtitleProperty": "Email",
+            "thumbnailProperty": "Picture"
+          }
+        },
+        "OData__ColorTag": {
+          "title": "颜色标记",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq",
+              "startswith"
+            ]
+          },
+          "maxLength": 255
+        },
+        "ComplianceAssetId": {
+          "title": "合规性资产 ID",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq",
+              "startswith"
+            ]
+          },
+          "maxLength": 255
+        },
+        "OData__ExtendedDescription": {
+          "title": "说明",
+          "type": "string",
+          "x-ms-permission": "read-write",
+          "x-ms-sort": "none"
+        },
+        "Created": {
+          "title": "创建时间",
+          "description": "创建此项目的时间。",
+          "type": "string",
+          "format": "date-time",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq",
+              "gt",
+              "ge",
+              "lt",
+              "le",
+              "ne"
+            ]
+          }
+        },
+        "Author#Claims": {
+          "title": "创建者 Claims",
+          "type": "string",
+          "description": "创建此项目的用户的内部标识符。",
+          "x-ms-permission": "read-only",
+          "x-ms-visibility": "internal"
+        },
+        "Author": {
+          "title": "创建者",
+          "description": "创建此项目的用户。",
+          "type": "object",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq"
+            ]
+          },
+          "properties": {
+            "@odata.type": {
+              "title": "@odata.type",
+              "x-ms-visibility": "internal",
+              "type": "string",
+              "x-ms-permission": "read-only"
+            },
+            "Claims": {
+              "title": "Claims",
+              "type": "string",
+              "description": "创建此项目的用户的内部标识符。",
+              "x-ms-permission": "read-only",
+              "x-ms-dynamic-values": {
+                "operationId": "GetEntityValues",
+                "parameters": {
+                  "dataset": {
+                    "parameter": "dataset"
+                  },
+                  "table": {
+                    "parameter": "table"
+                  },
+                  "id": "1df5e554-ec7e-46a6-901d-d85a3881cb18"
+                },
+                "value-path": "Claims",
+                "value-title": "DisplayName",
+                "value-collection": "value"
+              }
+            },
+            "DisplayName": {
+              "title": "DisplayName",
+              "type": "string",
+              "description": "创建此项目的用户的姓名。",
+              "x-ms-permission": "read-only",
+              "x-ms-capabilities": {
+                "x-ms-sp": {
+                  "OdataQueryName": "Title"
+                },
+                "filterFunctions": [
+                  "eq",
+                  "startswith"
+                ]
+              }
+            },
+            "Email": {
+              "title": "Email",
+              "type": "string",
+              "description": "创建此项目的用户的电子邮件地址。",
+              "format": "email",
+              "x-ms-permission": "read-only",
+              "x-ms-capabilities": {
+                "x-ms-sp": {
+                  "OdataQueryName": "EMail"
+                },
+                "filterFunctions": [
+                  "eq",
+                  "startswith"
+                ]
+              }
+            },
+            "Picture": {
+              "title": "Picture",
+              "type": "string",
+              "description": "链接到创建此项目的用户的图片。",
+              "format": "uri",
+              "x-ms-media-kind": "image",
+              "x-ms-media-default-folder-path": "/sites/ITops",
+              "x-ms-media-base-url": "https://vyung01.sharepoint.com/sites/ITops",
+              "x-ms-permission": "read-only"
+            },
+            "Department": {
+              "title": "Department",
+              "type": "string",
+              "description": "创建此项目的用户的部门名称。",
+              "x-ms-permission": "read-only"
+            },
+            "JobTitle": {
+              "title": "JobTitle",
+              "type": "string",
+              "description": "创建此项目的用户的职务。",
+              "x-ms-permission": "read-only"
+            }
+          },
+          "x-ms-displayFormat": {
+            "titleProperty": "DisplayName",
+            "subtitleProperty": "Email",
+            "thumbnailProperty": "Picture"
+          }
+        },
+        "CheckoutUser#Claims": {
+          "title": "签出对象 Claims",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-visibility": "internal"
+        },
+        "CheckoutUser": {
+          "title": "签出对象",
+          "type": "object",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "asc,desc",
+          "x-ms-capabilities": {
+            "filterFunctions": [
+              "eq"
+            ]
+          },
+          "properties": {
+            "@odata.type": {
+              "title": "@odata.type",
+              "x-ms-visibility": "internal",
+              "type": "string",
+              "x-ms-permission": "read-only"
+            },
+            "Claims": {
+              "title": "Claims",
+              "type": "string",
+              "x-ms-permission": "read-only",
+              "x-ms-dynamic-values": {
+                "operationId": "GetEntityValues",
+                "parameters": {
+                  "dataset": {
+                    "parameter": "dataset"
+                  },
+                  "table": {
+                    "parameter": "table"
+                  },
+                  "id": "3881510a-4e4a-4ee8-b102-8ee8e2d0dd4b"
+                },
+                "value-path": "Claims",
+                "value-title": "DisplayName",
+                "value-collection": "value"
+              }
+            },
+            "DisplayName": {
+              "title": "DisplayName",
+              "type": "string",
+              "x-ms-permission": "read-only",
+              "x-ms-capabilities": {
+                "x-ms-sp": {
+                  "OdataQueryName": "Title"
+                },
+                "filterFunctions": [
+                  "eq",
+                  "startswith"
+                ]
+              }
+            },
+            "Email": {
+              "title": "Email",
+              "type": "string",
+              "format": "email",
+              "x-ms-permission": "read-only",
+              "x-ms-capabilities": {
+                "x-ms-sp": {
+                  "OdataQueryName": "EMail"
+                },
+                "filterFunctions": [
+                  "eq",
+                  "startswith"
+                ]
+              }
+            },
+            "Picture": {
+              "title": "Picture",
+              "type": "string",
+              "format": "uri",
+              "x-ms-media-kind": "image",
+              "x-ms-media-default-folder-path": "/sites/ITops",
+              "x-ms-media-base-url": "https://vyung01.sharepoint.com/sites/ITops",
+              "x-ms-permission": "read-only"
+            },
+            "Department": {
+              "title": "Department",
+              "type": "string",
+              "x-ms-permission": "read-only"
+            },
+            "JobTitle": {
+              "title": "JobTitle",
+              "type": "string",
+              "x-ms-permission": "read-only"
+            }
+          },
+          "x-ms-displayFormat": {
+            "titleProperty": "DisplayName",
+            "subtitleProperty": "Email",
+            "thumbnailProperty": "Picture"
+          }
+        },
+        "OData__DisplayName": {
+          "title": "敏感度",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{Identifier}": {
+          "title": "标识符",
+          "description": "可在文件相关操作中用于选择文件的值。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{IsFolder}": {
+          "title": "是文件夹",
+          "description": "项目是文件夹时为 true，否则为 false。",
+          "type": "boolean",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{Thumbnail}": {
+          "title": "缩略图",
+          "description": "具有 3 种不同大小的项目缩略图的 URL (如可用)。",
+          "type": "object",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none",
+          "properties": {
+            "@odata.type": {
+              "title": "@odata.type",
+              "x-ms-visibility": "internal",
+              "type": "string",
+              "x-ms-permission": "read-only"
+            },
+            "Small": {
+              "title": "Small",
+              "type": "string",
+              "description": "项目的高度压缩大小缩略图的 URL(如果可用)。",
+              "x-ms-permission": "read-only"
+            },
+            "Medium": {
+              "title": "Medium",
+              "type": "string",
+              "description": "项目的标准大小缩略图的 URL(如果可用)。",
+              "x-ms-permission": "read-only"
+            },
+            "Large": {
+              "title": "Large",
+              "type": "string",
+              "description": "项目的最大大小缩略图的 URL(如果可用)。",
+              "x-ms-permission": "read-only"
+            }
+          }
+        },
+        "{Link}": {
+          "title": "项目链接",
+          "description": "可用于转到文件或列表项的链接。只有具备项权限的用户可打开此链接。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{Name}": {
+          "title": "名称",
+          "description": "文档库中项目的文件名称，列表中项目的显示名称。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{FilenameWithExtension}": {
+          "title": "文件名(带扩展名)",
+          "description": "对于库，返回文件名(包括扩展名)。对于列表，返回标题属性。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{Path}": {
+          "title": "文件夹路径",
+          "description": "项目所在的文件夹的路径(相对于站点地址)。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{FullPath}": {
+          "title": "完整路径",
+          "description": "项目、文件夹或文件的完整路径",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{ModerationStatus}": {
+          "title": "内容审批状态",
+          "description": "内容审批状态。可为以下内容之一: 草稿、待定、已批准或已拒绝",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{ModerationComment}": {
+          "title": "与此列表项的内容审批相关联的注释",
+          "description": "与列表项的审查相关联的注释。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{ContentType}#Id": {
+          "title": "内容类型 Id",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-visibility": "internal"
+        },
+        "{ContentType}": {
+          "title": "内容类型",
+          "description": "该项目的内容类型的名称。",
+          "type": "object",
+          "x-ms-permission": "read-write",
+          "x-ms-sort": "none",
+          "properties": {
+            "@odata.type": {
+              "title": "@odata.type",
+              "x-ms-visibility": "internal",
+              "type": "string",
+              "x-ms-permission": "read-write"
+            },
+            "Id": {
+              "title": "Id",
+              "type": "string",
+              "x-ms-dynamic-values": {
+                "operationId": "GetEntityValues",
+                "parameters": {
+                  "dataset": {
+                    "parameter": "dataset"
+                  },
+                  "table": {
+                    "parameter": "table"
+                  },
+                  "id": "4651e8f2-38c9-4ad0-8def-41f743f76f30"
+                },
+                "value-path": "Id",
+                "value-title": "Name",
+                "value-collection": "value"
+              }
+            },
+            "Name": {
+              "title": "Name",
+              "type": "string",
+              "x-ms-permission": "read-only"
+            }
+          },
+          "x-ms-displayFormat": {
+            "titleProperty": "Name"
+          }
+        },
+        "{IsCheckedOut}": {
+          "title": "已签出",
+          "description": "如果文件已签出，则为 True；否则为 false。",
+          "type": "boolean",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{DriveId}": {
+          "title": "驱动器 ID",
+          "description": "MS Graph 中文档库的唯一标识符",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{DriveItemId}": {
+          "title": "驱动器项 ID",
+          "description": "MS Graph 中文件的唯一标识符。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{SensitivityLabelId}": {
+          "title": "敏感度标签 ID",
+          "description": "文件敏感度标签的标识符。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{SensitivityLabelName}": {
+          "title": "敏感度标签显示名称",
+          "description": "文件敏感度标签的显示名称。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{VersionNumber}": {
+          "title": "版本号",
+          "description": "文件或列表项的版本号。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{TriggerWindowStartToken}": {
+          "title": "触发窗口开始令牌",
+          "description": "一个表示上次流检查时间的标记。如果你想要检查自上次流检查以来是否已修改一列或多列，请使用此标记。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        },
+        "{TriggerWindowEndToken}": {
+          "title": "触发窗口结束令牌",
+          "description": "一个表示当前流检查时间的标记。如果你想要检查自上次流检查以来是否已修改一列或多列，请使用此标记。",
+          "type": "string",
+          "x-ms-permission": "read-only",
+          "x-ms-sort": "none"
+        }
+      },
+      "x-ms-relationships": {
+        "MaterialType": {
+          "targetEntity": "MaterialType",
+          "referentialConstraints": {
+            "MaterialType#Id": {
+              "referencedProperty": "Id"
+            }
+          }
+        },
+        "Editor": {
+          "targetEntity": "Editor",
+          "referentialConstraints": {
+            "Editor#Claims": {
+              "referencedProperty": "Claims"
+            }
+          }
+        },
+        "Author": {
+          "targetEntity": "Author",
+          "referentialConstraints": {
+            "Author#Claims": {
+              "referencedProperty": "Claims"
+            }
+          }
+        },
+        "CheckoutUser": {
+          "targetEntity": "CheckoutUser",
+          "referentialConstraints": {
+            "CheckoutUser#Claims": {
+              "referencedProperty": "Claims"
+            }
+          }
+        },
+        "{ContentType}": {
+          "targetEntity": "4651e8f2-38c9-4ad0-8def-41f743f76f30",
+          "referentialConstraints": {
+            "{ContentType}#Id": {
+              "referencedProperty": "Id"
+            }
+          }
+        }
+      },
+      "x-ms-displayFormat": {
+        "propertiesDisplayOrder": [
+          "Title",
+          "WorkOrderNumber",
+          "ServiceCategory",
+          "MaterialType"
+        ],
+        "propertiesCompactDisplayOrder": [
+          "Title",
+          "WorkOrderNumber",
+          "ServiceCategory",
+          "MaterialType",
+          "Modified",
+          "Editor"
+        ],
+        "propertiesTabularDisplayOrder": [
+          "Title",
+          "WorkOrderNumber",
+          "ServiceCategory",
+          "MaterialType",
+          "Modified",
+          "Editor"
+        ]
+      }
+    }
+  },
+  "referencedEntities": {
+    "MaterialType": {
+      "lookupEndpoint": {
+        "path": "/tables/47537ce8-4397-4705-8f80-6147144a4961/entities/MaterialType",
+        "capabilities": {
+          "searchable": true,
+          "requiresSearch": false
+        }
+      }
+    },
+    "Editor": {
+      "lookupEndpoint": {
+        "path": "/tables/47537ce8-4397-4705-8f80-6147144a4961/entities/Editor",
+        "capabilities": {
+          "searchable": true,
+          "requiresSearch": false
+        }
+      }
+    },
+    "Author": {
+      "lookupEndpoint": {
+        "path": "/tables/47537ce8-4397-4705-8f80-6147144a4961/entities/Author",
+        "capabilities": {
+          "searchable": true,
+          "requiresSearch": false
+        }
+      }
+    },
+    "CheckoutUser": {
+      "lookupEndpoint": {
+        "path": "/tables/47537ce8-4397-4705-8f80-6147144a4961/entities/CheckoutUser",
+        "capabilities": {
+          "searchable": true,
+          "requiresSearch": false
+        }
+      }
+    },
+    "4651e8f2-38c9-4ad0-8def-41f743f76f30": {
+      "lookupEndpoint": {
+        "path": "/tables/47537ce8-4397-4705-8f80-6147144a4961/entities/%257bContentType%257d",
+        "capabilities": {
+          "searchable": true,
+          "requiresSearch": false
+        }
+      }
+    }
+  },
+  "webUrl": "https://vyung01.sharepoint.com/sites/ITops/WorkOrderMaterials/Forms/AllItems.aspx",
+  "x-ms-connection-version": ""
+}

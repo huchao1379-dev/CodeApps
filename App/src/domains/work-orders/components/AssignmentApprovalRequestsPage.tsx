@@ -43,7 +43,7 @@ export function AssignmentApprovalRequestsPage({ active, refreshToken, onRefresh
   const [statusFilter, setStatusFilter] = useState<'all' | AssignmentApprovalStatus>('all')
   const [sort, setSort] = useState<Array<{ field: string; direction: 'asc' | 'desc' }>>([{ field: 'submittedAt', direction: 'desc' }])
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(25)
+  const [pageSize, setPageSize] = useState(10)
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -120,7 +120,7 @@ export function AssignmentApprovalRequestsPage({ active, refreshToken, onRefresh
         onRowClick={(request) => setSelectedRequestId(request.id)}
         sort={sort} onSortChange={setSort} />
       <footer className="approval-table-footer"><span>显示 {visibleRequests.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, visibleRequests.length)} / {visibleRequests.length}</span>
-        <Pagination page={page} pageSize={pageSize} total={visibleRequests.length} loading={loading} pageSizeOptions={[10, 25, 50]}
+        <Pagination page={page} pageSize={pageSize} total={visibleRequests.length} loading={loading} pageSizeOptions={[10, 20, 50]}
           onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />
       </footer>
     </section>

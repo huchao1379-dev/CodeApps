@@ -1,11 +1,11 @@
 @import './styles/tokens.css';
 
 :root {
-  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", Inter, sans-serif;
+  font-family: var(--font-family-base);
   font-size: 16px;
-  line-height: 1.5;
-  color: #182230;
-  background: #f6f8fb;
+  line-height: var(--line-height-base);
+  color: var(--color-text-primary);
+  background: var(--color-page-background);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -16,11 +16,11 @@
 
 * { box-sizing: border-box; }
 html { min-width: 320px; min-height: 100%; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--color-page-background); }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-  outline: 3px solid #b8a7fa;
+  outline: 3px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
-::selection { color: #37227b; background: #e8e0ff; }
+::selection { color: var(--color-primary-pressed); background: var(--color-primary-soft-strong); }

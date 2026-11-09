@@ -27,6 +27,7 @@ export interface WorkOrderBatchActionDialogProps {
   pendingApprovalLoadsLoading: boolean
   pendingApprovalLoadsError: string | null
   lockedEmployee?: EmployeeOption | null
+  progress?: { done: number; total: number } | null
   onClose: () => void
   onSubmit: (input: WorkOrderBatchActionInput) => Promise<void>
 }
@@ -38,7 +39,7 @@ const ACTION_TITLES: Record<WorkOrderBatchAction, string> = {
   cancel: '批量取消工单',
 }
 
-export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOrders, employees, busy, error, pendingApprovalLoads, pendingApprovalLoadsLoading, pendingApprovalLoadsError, lockedEmployee, onClose, onSubmit }: WorkOrderBatchActionDialogProps) {
+export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOrders, employees, busy, error, pendingApprovalLoads, pendingApprovalLoadsLoading, pendingApprovalLoadsError, lockedEmployee, progress, onClose, onSubmit }: WorkOrderBatchActionDialogProps) {
   const [employeeId, setEmployeeId] = useState('')
   const [priority, setPriority] = useState<Priority>(PRIORITY.medium)
   const [status, setStatus] = useState<WorkOrderStatus>(WORK_ORDER_STATUS.inProgress)
@@ -95,7 +96,7 @@ export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOr
 
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
     <section ref={dialogRef} tabIndex={-1} className="modal-card bulk-dialog" role="dialog" aria-modal="true" aria-labelledby="bulk-action-title">
-      <header className="modal-header"><div><h2 id="bulk-action-title">{ACTION_TITLES[action]}</h2><p>将对 {workOrders.length} 张工单逐条执行，失败项不会阻止其他记录。</p></div>
+      <header className="modal-header"><div><h2 id="bulk-action-title">{ACTION_TITLES[action]}</h2><p>将对 {workOrders.length} 张工单执行；非派发操作最多并发 3 条，失败项不会阻止其他记录。</p></div>
         <button data-overlay-initial-focus className="icon-button" type="button" aria-label="关闭" disabled={busy} onClick={onClose}>×</button>
       </header>
       <form className="form-stack" onSubmit={(event) => {
@@ -127,11 +128,15 @@ export function WorkOrderBatchActionDialog({ open, action, workOrders, allWorkOr
           {action !== 'priority' && <label>{action === 'cancel' ? '取消原因' : action === 'status' && status === WORK_ORDER_STATUS.resolved ? '解决方案' : action === 'status' && status === WORK_ORDER_STATUS.onHold ? '暂停原因' : '操作说明'}{needsNote && <b>*</b>}
             <input type="text" maxLength={100} required={needsNote} value={note} onChange={(event) => setNote(event.target.value)} placeholder="最多 100 个字符" />
           </label>}
+          {busy && progress && progress.total > 0 && <div className="bulk-progress" role="status" aria-live="polite">
+            <div className="bulk-progress-label">处理进度 {progress.done} / {progress.total}</div>
+            <div className="bulk-progress-track"><span style={{ width: `${Math.min(100, (progress.done / progress.total) * 100)}%` }} /></div>
+          </div>}
           {error && <p className="form-error" role="alert">{error}</p>}
         </div>
         <footer className="modal-footer"><button className="button button-quiet" type="button" disabled={busy} onClick={onClose}>取消</button>
           <button className={action === 'cancel' ? 'button button-danger-quiet' : 'button button-primary'} type="submit" disabled={busy || Boolean(assignmentBlocker) || (action === 'assign' && !employeeId) || (action === 'status' && statusOptions.length === 0)}>
-            {busy ? '正在逐条处理…' : `确认执行 ${workOrders.length} 项${action === 'assign' && workOrders.some((item) => item.assignedToId) ? '（含审批）' : ''}`}
+            {busy ? (progress ? `处理中 ${progress.done}/${progress.total}…` : '正在处理…') : `确认执行 ${workOrders.length} 项${action === 'assign' && workOrders.some((item) => item.assignedToId) ? '（含审批）' : ''}`}
           </button>
         </footer>
       </form>
