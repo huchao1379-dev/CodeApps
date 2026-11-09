@@ -164,12 +164,35 @@ function Avatar({ name, small = false }: { name: string | null; small?: boolean 
   return <span className={`avatar${small ? ' avatar-small' : ''}`}>{name.slice(-1)}</span>
 }
 
-function MetricCard({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: string }) {
-  return <article className="metric-card">
+function MetricCard({
+  label,
+  value,
+  detail,
+  tone,
+  active = false,
+  onClick,
+}: {
+  label: string
+  value: number
+  detail: string
+  tone: string
+  active?: boolean
+  onClick?: () => void
+}) {
+  const interactive = Boolean(onClick)
+  const className = `metric-card${interactive ? ' metric-card-interactive' : ''}${active ? ' is-active' : ''}`
+  if (!interactive) {
+    return <article className={className}>
+      <div className={`metric-icon metric-${tone}`}>{tone === 'purple' ? '▦' : tone === 'amber' ? '◷' : tone === 'blue' ? '↗' : '✓'}</div>
+      <div className="metric-copy"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>
+      <span className={`metric-spark spark-${tone}`} aria-hidden="true">⌁</span>
+    </article>
+  }
+  return <button type="button" className={className} aria-pressed={active} onClick={onClick}>
     <div className={`metric-icon metric-${tone}`}>{tone === 'purple' ? '▦' : tone === 'amber' ? '◷' : tone === 'blue' ? '↗' : '✓'}</div>
     <div className="metric-copy"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>
     <span className={`metric-spark spark-${tone}`} aria-hidden="true">⌁</span>
-  </article>
+  </button>
 }
 
 function WorkOrderDetail({
@@ -674,6 +697,17 @@ export default function WorkOrderWorkspacePage() {
 
   const clearFilters = resetListFilters
 
+  const applyMetricStatusFilter = (nextStatus: 'all' | WorkOrderStatus) => {
+    const nextValue = nextStatus === 'all' ? 'all' : String(nextStatus)
+    setStatusFilter((current) => (current === nextValue ? 'all' : nextValue))
+    setLinkedWorkOrderIds(null)
+    setLinkedFilterLabel(null)
+    setServerFilterNote(null)
+    setOverdueOnly(false)
+    setSelectedWorkOrderKeys([])
+    setPage(1)
+  }
+
   const handleFilterChange = (values: FilterValues) => {
     const valueFor = (key: string) => typeof values[key] === 'string' ? values[key] as string : 'all'
     setStatusFilter(valueFor('status'))
@@ -1066,11 +1100,15 @@ export default function WorkOrderWorkspacePage() {
           onRetry={() => setRefreshToken((value) => value + 1)} workOrders={state.workOrders} employees={state.employees ?? []}
           departments={state.departments ?? []} serviceCategories={state.serviceCategories ?? []} onOpenWorkOrders={openLinkedWorkOrders} />}
         {workspaceId === 'it-service' && view === '工单管理' && <>
-          <section className="metrics-grid" aria-label="工单概览">
-            <MetricCard label="全部工单" value={stats.total} detail="当前读取记录" tone="purple" />
-            <MetricCard label="待分派" value={stats.new} detail="需要安排负责人" tone="amber" />
-            <MetricCard label="处理中" value={stats.inProgress} detail="正在跟进" tone="blue" />
-            <MetricCard label="已解决" value={stats.resolved} detail="等待确认或关闭" tone="green" />
+          <section className="metrics-grid" aria-label="工单概览快捷筛选">
+            <MetricCard label="全部工单" value={stats.total} detail="点击显示全部状态" tone="purple"
+              active={statusFilter === 'all'} onClick={() => applyMetricStatusFilter('all')} />
+            <MetricCard label="待分派" value={stats.new} detail="点击筛选待分派工单" tone="amber"
+              active={statusFilter === String(WORK_ORDER_STATUS.new)} onClick={() => applyMetricStatusFilter(WORK_ORDER_STATUS.new)} />
+            <MetricCard label="处理中" value={stats.inProgress} detail="点击筛选处理中工单" tone="blue"
+              active={statusFilter === String(WORK_ORDER_STATUS.inProgress)} onClick={() => applyMetricStatusFilter(WORK_ORDER_STATUS.inProgress)} />
+            <MetricCard label="已解决" value={stats.resolved} detail="点击筛选已解决工单" tone="green"
+              active={statusFilter === String(WORK_ORDER_STATUS.resolved)} onClick={() => applyMetricStatusFilter(WORK_ORDER_STATUS.resolved)} />
           </section>
 
           <section className="activity-strip"><div className="activity-label"><span className="activity-icon">◷</span><div><strong>最近动态</strong><small>Dataverse 工单历史</small></div></div>

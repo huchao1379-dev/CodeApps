@@ -6,6 +6,22 @@ export { StatusBadge, getStatusBadgeVariant } from './data-display/StatusBadge'
 export type { BadgeVariant, StatusBadgeProps } from './data-display/StatusBadge'
 export { Timeline } from './data-display/Timeline'
 export type { TimelineItem, TimelineProps, TimelineTone } from './data-display/Timeline'
+export {
+  AreaTrendChart,
+  CapacityGaugeChart,
+  DonutChart,
+  StackedCompositionChart,
+} from './charts'
+export type {
+  AreaTrendChartProps,
+  CapacityGaugeChartProps,
+  ChartCapacityItem,
+  ChartCategoryItem,
+  ChartOverlaySeries,
+  ChartSeriesPoint,
+  DonutChartProps,
+  StackedCompositionChartProps,
+} from './charts'
 export { FilterBar } from './data-interaction/FilterBar'
 export type { DatePeriod, DatePeriodValue, DateRangeValue, FilterBarProps, FilterDefinition, FilterOption, FilterType, FilterValue, FilterValues } from './data-interaction/FilterBar'
 export { Pagination } from './data-interaction/Pagination'

@@ -74,7 +74,10 @@
 .create-button { min-height: 38px; padding: 0 15px; }
 .plus-mark { margin-left: -2px; font-size: 19px; font-weight: 300; line-height: 1; }
 .metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
-.metric-card { position: relative; display: flex; min-height: 106px; align-items: flex-start; gap: 12px; overflow: hidden; padding: 17px 16px; border: 1px solid #e9edf2; border-radius: 10px; background: white; box-shadow: 0 2px 4px #24364a05; }
+.metric-card { position: relative; display: flex; min-height: 106px; align-items: flex-start; gap: 12px; overflow: hidden; padding: 17px 16px; border: 1px solid #e9edf2; border-radius: 10px; background: white; box-shadow: 0 2px 4px #24364a05; text-align: left; color: inherit; font: inherit; }
+button.metric-card { width: 100%; cursor: pointer; }
+.metric-card-interactive:hover { border-color: #d5d0f0; background: #fcfbff; }
+.metric-card-interactive.is-active { border-color: #c4baf0; background: #f7f5ff; box-shadow: inset 0 0 0 1px #c4baf088; }
 .metric-icon { display: grid; width: 31px; height: 31px; flex: 0 0 auto; place-items: center; border-radius: 8px; font-size: 15px; }
 .metric-purple { color: #7462c4; background: #f0edff; }
 .metric-amber { color: #c78a32; background: #fff5e3; }
@@ -842,12 +845,40 @@
 .workload-track span { display: block; height: 100%; border-radius: inherit; background: #668c83; }
 .lane-overloaded .workload-track span { background: #c85b62; }
 .capacity-conflict { margin: 7px 0 0; color: #a33f48; font-size: 10px; }
-.engineer-lane-dropzone { display: grid; min-height: 75px; align-content: start; gap: 6px; margin-top: 12px; padding: 8px; border: 1px dashed #ccd3dd; border-radius: 7px; background: #fafbfc; }
-.engineer-lane-dropzone:hover { border-color: #8d80ce; background: #f8f6ff; }
+.engineer-lane-dropzone { display: grid; min-height: 88px; align-content: center; gap: 6px; margin-top: 12px; padding: 8px; border: 1px dashed #ccd3dd; border-radius: 7px; background: #fafbfc; }
+.engineer-lane-dropzone:not(.is-readonly):hover { border-color: #8d80ce; background: #f8f6ff; }
+.engineer-lane-dropzone.is-readonly { border-style: solid; background: #f7f8fa; }
 .dropzone-hint { align-self: center; padding: 12px 0; color: #929cac; text-align: center; font-size: 10px; }
-.engineer-task { display: grid; gap: 3px; padding: 8px; border: 1px solid #e3e8ef; border-radius: 6px; color: #364457; background: #fff; text-align: left; }
+.engineer-task-rail {
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 6px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+}
+.engineer-task-rail::-webkit-scrollbar { height: 6px; }
+.engineer-task-rail::-webkit-scrollbar-thumb { border-radius: 99px; background: #d5dbe6; }
+.engineer-task {
+  display: grid;
+  gap: 3px;
+  width: 148px;
+  min-width: 148px;
+  max-width: 148px;
+  padding: 8px;
+  border: 1px solid #e3e8ef;
+  border-radius: 6px;
+  color: #364457;
+  background: #fff;
+  text-align: left;
+  scroll-snap-align: start;
+}
 .engineer-task strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
-.engineer-task span { color: #8290a1; font-size: 9px; }
+.engineer-task span,
+.engineer-task em { overflow: hidden; color: #8290a1; font-size: 9px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.dispatch-show-all-button { white-space: nowrap; }
 
 .operations-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .operations-kpi { display: grid; min-height: 100px; align-content: center; gap: 4px; padding: 15px; border: 1px solid #e2e7ef; border-radius: 8px; color: #536174; background: #fff; text-align: left; }
@@ -860,6 +891,63 @@ button.operations-kpi:hover { border-color: #c9a75f; background: #fffdf8; }
 .operations-chart-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(280px, .9fr); align-items: start; gap: 14px; }
 .operations-panel > header { min-height: 62px; }
 .operations-panel > header p { margin: 4px 0 0; color: #8490a0; font-size: 10px; }
+.operations-chart-body { padding: 10px 15px 14px; }
+.operations-chart-body .analysis-footnote { margin: 12px 0 0; }
+.trend-panel .ui-chart-svg-trend { max-height: 200px; }
+.status-panel .ui-chart-svg-donut { width: min(100%, 300px); max-width: 300px; }
+.trend-status-curve-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 10px;
+}
+.trend-status-curve-label {
+  color: var(--color-text-muted, #8490a0);
+  font-size: 11px;
+  font-weight: 650;
+}
+.trend-status-curve-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.trend-status-chip {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid #e1e6ee;
+  border-radius: 999px;
+  color: #657286;
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.trend-status-chip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chip-color, #8b95a7);
+}
+.trend-status-chip:hover { border-color: #c9c3ea; background: #faf9ff; }
+.trend-status-chip.is-active {
+  border-color: color-mix(in srgb, var(--chip-color, #7b6fd0) 55%, #fff);
+  color: #354257;
+  background: color-mix(in srgb, var(--chip-color, #7b6fd0) 14%, #fff);
+  font-weight: 650;
+}
+.trend-status-clear {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  color: #6554a6;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.trend-status-clear:hover { text-decoration: underline; }
+.chart-grain-segment { flex: 0 0 auto; align-self: flex-start; }
 .chart-legend { display: flex; gap: 12px; color: #718095; font-size: 10px; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .chart-legend i { width: 8px; height: 8px; border-radius: 2px; }
@@ -1111,14 +1199,16 @@ button.operations-kpi:hover { border-color: #c9a75f; background: #fffdf8; }
 .lane-overloaded .workload-track span { background: var(--color-danger); }
 .capacity-conflict { color: var(--color-danger); font-size: var(--font-size-xs); }
 .engineer-lane-dropzone {
-  min-height: 68px; margin-top: var(--spacing-md); padding: var(--spacing-sm);
+  min-height: 88px; margin-top: var(--spacing-md); padding: var(--spacing-sm);
   border-color: var(--color-border-strong); background: var(--color-surface-muted);
 }
 .dropzone-hint { font-size: var(--font-size-xs); color: var(--color-text-muted); padding: 10px 0; }
 .engineer-task { padding: 7px 8px; border-color: var(--color-border); border-radius: var(--radius-sm); }
 .engineer-task strong { font-size: var(--font-size-xs); }
-.engineer-task span { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.engineer-task span,
+.engineer-task em { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 .dispatch-assign-button { font-size: var(--font-size-sm); min-height: 34px; }
+.dispatch-show-all-button { min-height: 40px; font-size: var(--font-size-sm); }
 .dispatch-backlog .ui-state,
 .engineer-panel .ui-state { min-height: 160px; padding: var(--spacing-xl) var(--spacing-lg); }
 

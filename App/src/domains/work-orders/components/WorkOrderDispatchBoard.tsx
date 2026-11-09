@@ -18,32 +18,36 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
   const [selectedBacklogId, setSelectedBacklogId] = useState<string | null>(null)
   const [employeeQuery, setEmployeeQuery] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState('all')
-  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all')
-  const [capacityFilter, setCapacityFilter] = useState<'all' | 'has-capacity' | 'full'>('all')
+  const [showAllPeople, setShowAllPeople] = useState(false)
 
-  const workloadFor = (employeeId: string) => workOrders.filter((workOrder) =>
+  const assignedOrdersFor = (employeeId: string) => workOrders.filter((workOrder) =>
     workOrder.assignedToId === employeeId && ACTIVE_STATUSES.includes(workOrder.status),
-  ).length
+  )
+  const workloadFor = (employeeId: string) => assignedOrdersFor(employeeId).length
+  const isOverloaded = (employee: EmployeeOption) => {
+    const capacity = employee.maxTaskLoad
+    return capacity != null && workloadFor(employee.id) >= capacity
+  }
+  const isAssignable = (employee: EmployeeOption) => employee.isAvailableForOrder && !isOverloaded(employee)
 
   const departments = useMemo(() => {
     const options = new Map<string, string>()
     activeEmployees.forEach((employee) => options.set(employee.departmentId ?? 'unassigned', employee.department || '未设置部门'))
     return [...options].map(([id, name]) => ({ id, name })).sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
   }, [activeEmployees])
+
   const normalizedQuery = employeeQuery.trim().toLocaleLowerCase()
-  const filteredEmployees = activeEmployees.filter((employee) => {
+  const matchingEmployees = activeEmployees.filter((employee) => {
     const searchable = [employee.employeeName, employee.email ?? '', employee.department ?? '', employee.skills ?? '']
       .some((value) => value.toLocaleLowerCase().includes(normalizedQuery))
     const matchesDepartment = departmentFilter === 'all'
       || (departmentFilter === 'unassigned' ? !employee.departmentId : employee.departmentId === departmentFilter)
-    const matchesAvailability = availabilityFilter === 'all'
-      || (availabilityFilter === 'available' ? employee.isAvailableForOrder : !employee.isAvailableForOrder)
-    const workload = workloadFor(employee.id)
-    const hasCapacity = employee.maxTaskLoad == null || workload < employee.maxTaskLoad
-    const matchesCapacity = capacityFilter === 'all' || (capacityFilter === 'has-capacity' ? hasCapacity : !hasCapacity)
-    return searchable && matchesDepartment && matchesAvailability && matchesCapacity
+    return searchable && matchesDepartment
   })
-  const hasFilters = Boolean(employeeQuery || departmentFilter !== 'all' || availabilityFilter !== 'all' || capacityFilter !== 'all')
+
+  const hiddenPeopleCount = matchingEmployees.filter((employee) => !isAssignable(employee)).length
+  const visibleEmployees = matchingEmployees.filter((employee) => showAllPeople || isAssignable(employee))
+  const hasFilters = Boolean(employeeQuery || departmentFilter !== 'all')
   const selectedBacklog = backlog.find((item) => item.id === selectedBacklogId) ?? null
 
   useEffect(() => {
@@ -53,19 +57,17 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
   const clearEmployeeFilters = () => {
     setEmployeeQuery('')
     setDepartmentFilter('all')
-    setAvailabilityFilter('all')
-    setCapacityFilter('all')
   }
 
   const dropWorkOrder = (event: DragEvent<HTMLElement>, employee: EmployeeOption) => {
     event.preventDefault()
+    if (!isAssignable(employee)) return
     const workOrder = backlog.find((item) => item.id === event.dataTransfer.getData('text/work-order-id'))
     if (workOrder) onRequestAssignment(workOrder, employee)
   }
 
   const assignSelectedTo = (employee: EmployeeOption) => {
-    if (!selectedBacklog) return
-    if (!employee.isAvailableForOrder) return
+    if (!selectedBacklog || !isAssignable(employee)) return
     onRequestAssignment(selectedBacklog, employee)
   }
 
@@ -91,7 +93,7 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
 
   return <section className="dispatch-board" aria-label="工单派发看板">
     <header className="feature-heading"><div><span className="feature-eyebrow">DISPATCH WORKBENCH</span><h2>拖拽 / 点击派发</h2>
-      <p>先选中待分派工单，再点工程师列的「分配」；也可继续拖拽。方向键可切换选中项。</p></div>
+      <p>默认可派单区只显示可接单且未满负载的工程师；已分配工单可左右滑动查看。</p></div>
       <div className="dispatch-backlog-count"><strong>{backlog.length}</strong><span>待分派工单</span></div>
     </header>
     {selectedBacklog && <div className="dispatch-selection-chip" role="status">
@@ -125,38 +127,52 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
 
       <section className="engineer-panel" aria-label="工程师任务看板">
         <header className="engineer-panel-header">
-          <div className="engineer-panel-title"><div><h3>工程师任务看板</h3><p>按人员条件筛选可见的工程师与当前负载</p></div>
-            <span>{filteredEmployees.length} / {activeEmployees.length} 人</span></div>
+          <div className="engineer-panel-title"><div><h3>可派单工程师</h3>
+            <p>{showAllPeople ? '已展开全部人员，含不可接单与已满负载' : '默认隐藏不可接单与已达工作上限的人员'}</p></div>
+            <span>{visibleEmployees.length} / {matchingEmployees.length} 人</span></div>
           <div className="dispatch-filter-row">
             <SearchInput value={employeeQuery} onChange={setEmployeeQuery} placeholder="搜索姓名、技能或邮箱" ariaLabel="搜索工程师" />
             <label className="dispatch-filter-field"><span>部门</span><select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
               <option value="all">全部部门</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select></label>
-            <label className="dispatch-filter-field"><span>接单状态</span><select value={availabilityFilter} onChange={(event) => setAvailabilityFilter(event.target.value as typeof availabilityFilter)}>
-              <option value="all">全部</option><option value="available">可接单</option><option value="unavailable">暂不可接单</option>
-            </select></label>
-            <label className="dispatch-filter-field"><span>工作负载</span><select value={capacityFilter} onChange={(event) => setCapacityFilter(event.target.value as typeof capacityFilter)}>
-              <option value="all">全部负载</option><option value="has-capacity">有剩余容量</option><option value="full">已达上限</option>
-            </select></label>
             <button className="dispatch-filter-reset" type="button" disabled={!hasFilters} onClick={clearEmployeeFilters}>清除筛选</button>
+            <button
+              className={`button ${showAllPeople ? 'button-quiet' : 'button-primary'} dispatch-show-all-button`}
+              type="button"
+              aria-pressed={showAllPeople}
+              onClick={() => setShowAllPeople((current) => !current)}
+            >
+              {showAllPeople ? '仅看可派单人员' : `查看所有人员${hiddenPeopleCount > 0 ? `（+${hiddenPeopleCount}）` : ''}`}
+            </button>
           </div>
         </header>
         {activeEmployees.length === 0
           ? <EmptyState title="没有已启用的工程师" description="请先在资源目录中维护可接单员工。" icon="◉" />
-          : filteredEmployees.length === 0
-            ? <EmptyState title="没有符合条件的工程师" description="调整部门、接单状态或负载筛选后再试。" icon="⌕"
-              action={<button className="button button-quiet" type="button" onClick={clearEmployeeFilters}>清除筛选</button>} />
-            : <div className="engineer-board" aria-label="筛选后的工程师任务看板">{filteredEmployees.map((employee) => {
-          const workload = workloadFor(employee.id)
+          : visibleEmployees.length === 0
+            ? <EmptyState
+              title={matchingEmployees.length === 0 ? '没有符合条件的工程师' : '当前没有可派单人员'}
+              description={matchingEmployees.length === 0
+                ? '调整部门或搜索条件后再试。'
+                : `有 ${hiddenPeopleCount} 人因不可接单或已达上限被隐藏，可点击「查看所有人员」展开。`}
+              icon="⌕"
+              action={matchingEmployees.length === 0
+                ? <button className="button button-quiet" type="button" onClick={clearEmployeeFilters}>清除筛选</button>
+                : <button className="button button-primary" type="button" onClick={() => setShowAllPeople(true)}>查看所有人员</button>}
+            />
+            : <div className="engineer-board" aria-label={showAllPeople ? '全部工程师任务看板' : '可派单工程师任务看板'}>{visibleEmployees.map((employee) => {
+          const assignedOrders = assignedOrdersFor(employee.id)
+          const workload = assignedOrders.length
           const capacity = employee.maxTaskLoad
-          const overloaded = capacity != null && workload >= capacity
+          const overloaded = isOverloaded(employee)
           const unavailable = !employee.isAvailableForOrder
-          const canClickAssign = Boolean(selectedBacklog) && !unavailable && !overloaded
+          const assignable = isAssignable(employee)
+          const canClickAssign = Boolean(selectedBacklog) && assignable
           return <section className={`engineer-lane${overloaded ? ' lane-overloaded' : ''}${unavailable ? ' lane-unavailable' : ''}${canClickAssign ? ' lane-assignable' : ''}`} key={employee.id}
-            onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropWorkOrder(event, employee)}>
+            onDragOver={(event) => { if (assignable) event.preventDefault() }} onDrop={(event) => dropWorkOrder(event, employee)}>
             <header className="engineer-lane-header"><span className="engineer-avatar">{employee.employeeName.slice(-1)}</span>
               <span className="engineer-identity"><strong>{employee.employeeName}</strong><small>{employee.department ?? '未设置部门'}</small></span>
-              <StatusBadge status={unavailable ? 'unavailable' : 'available'} label={unavailable ? '暂不可接单' : '可接单'} size="small" />
+              <StatusBadge status={unavailable ? 'unavailable' : overloaded ? 'overdue' : 'available'}
+                label={unavailable ? '暂不可接单' : overloaded ? '已达上限' : '可接单'} size="small" />
             </header>
             <div className="workload-summary"><span>活动工单</span><strong>{workload}<small> / {capacity ?? '∞'}</small></strong></div>
             <div className="workload-track"><span style={{ width: capacity ? `${Math.min(100, workload / capacity * 100)}%` : workload > 0 ? '25%' : '0%' }} /></div>
@@ -169,13 +185,18 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
                 {selectedBacklog ? `分配给 ${employee.employeeName}` : '先选中工单'}
               </button>
             </div>
-            <div className="engineer-lane-dropzone" aria-label={`将工单拖到${employee.employeeName}`}>
-              {workOrders.filter((workOrder) => workOrder.assignedToId === employee.id && ACTIVE_STATUSES.includes(workOrder.status)).map((workOrder) =>
-                <button key={workOrder.id} className="engineer-task" type="button" onClick={() => onOpenWorkOrder(workOrder)}>
-                  <strong>{workOrder.workOrderName}</strong><span>{workOrder.workOrderNumber} · {STATUS_LABELS[workOrder.status]}</span>
-                </button>,
-              )}
-              <span className="dropzone-hint">{selectedBacklog ? '可点击上方分配，或拖放到此处' : '拖放待分派工单到此处'}</span>
+            <div className={`engineer-lane-dropzone${assignable ? '' : ' is-readonly'}`} aria-label={`${employee.employeeName}的已分配工单`}>
+              {assignedOrders.length > 0 ? <div className="engineer-task-rail" role="list" aria-label={`${employee.employeeName}已分配工单，可左右滑动`}>
+                {assignedOrders.map((workOrder) => <button key={workOrder.id} className="engineer-task" type="button" role="listitem" onClick={() => onOpenWorkOrder(workOrder)}>
+                  <strong>{workOrder.workOrderName}</strong>
+                  <span>{workOrder.workOrderNumber || '编号待生成'}</span>
+                  <em>{STATUS_LABELS[workOrder.status]}</em>
+                </button>)}
+              </div> : <span className="dropzone-hint">
+                {assignable
+                  ? (selectedBacklog ? '可点击上方分配，或拖放到此处' : '暂无活动工单 · 拖放待分派工单到此处')
+                  : '暂无活动工单'}
+              </span>}
             </div>
           </section>
         })}</div>}
