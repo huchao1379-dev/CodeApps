@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { FilterBar, type DatePeriodValue, type FilterDefinition, type FilterValues } from '../../../shared/components'
-import { PRIORITY, PRIORITY_LABELS, STATUS_LABELS, WORK_ORDER_STATUS, type DepartmentOption, type EmployeeOption, type Priority, type ServiceCategoryOption, type WorkOrder, type WorkOrderStatus } from '../types/workOrder.types'
+import { PRIORITY, PRIORITY_LABELS, STATUS_LABELS, WORK_ORDER_STATUS, type DepartmentOption, type EmployeeOption, type ServiceCategoryOption, type WorkOrder, type WorkOrderStatus } from '../types/workOrder.types'
 
 const ACTIVE_STATUSES: readonly WorkOrderStatus[] = [WORK_ORDER_STATUS.assigned, WORK_ORDER_STATUS.inProgress, WORK_ORDER_STATUS.onHold]
 const COMPLETED_STATUSES: readonly WorkOrderStatus[] = [WORK_ORDER_STATUS.resolved, WORK_ORDER_STATUS.closed]

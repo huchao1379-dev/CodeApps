@@ -122,13 +122,13 @@ export function WorkOrderFormDialog({
             }))
           }}>
             <option value="">选择服务类别</option>
-            {hasExistingInactiveCategory && <option value={workOrder?.serviceCategoryId}>已停用：{workOrder?.serviceCategoryLabel}</option>}
+            {hasExistingInactiveCategory && <option value={workOrder?.serviceCategoryId ?? ''}>已停用：{workOrder?.serviceCategoryLabel}</option>}
             {activeCategories.map((category) => <option key={category.id} value={category.id}>{category.serviceCategoryName}</option>)}
           </select></label>
           <label>负责部门<b>*</b><select required value={form.departmentId}
             onChange={(event) => setForm((current) => ({ ...current, departmentId: event.target.value }))}>
             <option value="">选择负责部门</option>
-            {hasExistingInactiveDepartment && <option value={workOrder?.departmentId}>已停用：{workOrder?.department}</option>}
+            {hasExistingInactiveDepartment && <option value={workOrder?.departmentId ?? ''}>已停用：{workOrder?.department}</option>}
             {activeDepartments.map((department) => <option key={department.id} value={department.id}>{department.departmentName}</option>)}
           </select></label>
         </div>

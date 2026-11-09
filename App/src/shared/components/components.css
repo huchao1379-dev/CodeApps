@@ -102,6 +102,26 @@
 .ui-table-loading-bar { display: flex; align-items: center; gap: 9px; padding: 10px 12px; color: var(--color-text-muted); font-size: var(--font-size-sm); }
 .ui-table-pagination { padding: var(--spacing-md) var(--spacing-lg); border-top: 1px solid var(--color-border); }
 
+.ui-timeline { display: flex; flex-direction: column; }
+.ui-timeline-empty { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.ui-timeline-row { position: relative; display: flex; gap: 13px; min-height: 62px; }
+.ui-timeline-row:not(:last-child)::before { position: absolute; top: 10px; bottom: -1px; left: 5px; width: 1px; background: var(--color-border); content: ''; }
+.ui-timeline-dot { position: relative; z-index: 1; width: 11px; height: 11px; flex: 0 0 auto; margin-top: 3px; border: 2px solid #d4cafa; border-radius: 50%; background: var(--color-surface); }
+.ui-timeline-dot-created { border-color: #a6d0b7; }
+.ui-timeline-dot-status-change { border-color: #a9c8df; }
+.ui-timeline-dot-assignment-change { border-color: #e5c18f; }
+.ui-timeline-dot-info { border-color: #a9c8df; }
+.ui-timeline-dot-warning { border-color: #e5c18f; }
+.ui-timeline-dot-success { border-color: #a6d0b7; }
+.ui-timeline-dot-default { border-color: #d4cafa; }
+.ui-timeline-content { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5px; padding-bottom: 14px; }
+.ui-timeline-content strong { color: var(--color-text-primary); font-size: 13px; font-weight: 650; line-height: 1.6; }
+.ui-timeline-description { color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
+.ui-timeline-description p { margin: 0; }
+.ui-timeline-meta { color: var(--color-text-muted); font-size: 10px; line-height: 1.55; overflow-wrap: anywhere; }
+.ui-timeline-meta small { display: block; margin-top: 4px; }
+.ui-timeline-time { color: var(--color-text-muted); font-size: 10px; }
+
 .ui-bulk-action-bar { position: sticky; z-index: 3; bottom: 0; display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 10px; padding: 11px 16px; border-top: 1px solid var(--color-primary-border); color: var(--color-primary-text); background: #f7f5ff; box-shadow: 0 -5px 14px #24364a0c; }
 .ui-bulk-count { flex: 0 0 auto; font-size: var(--font-size-sm); }
 .ui-bulk-actions { display: flex; flex: 1 1 auto; flex-wrap: wrap; gap: 7px; }

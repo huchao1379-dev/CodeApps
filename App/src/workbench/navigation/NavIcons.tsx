@@ -39,3 +39,8 @@ export const NavIconResources = () => <Icon>
   <path d="M4.5 16c.8-2.6 2.8-4 5.5-4s4.7 1.4 5.5 4" {...stroke} />
   <circle cx="15.2" cy="8.2" r="1.6" {...stroke} />
 </Icon>
+
+export const NavIconInventory = () => <Icon>
+  <path d="M4 7.2 10 4l6 3.2v8.3L10 18.5 4 15.5V7.2Z" {...stroke} />
+  <path d="M10 10.2V18.5M4 7.2 10 10.2 16 7.2" {...stroke} />
+</Icon>

@@ -25,6 +25,7 @@ import {
 import type { Cr590_workorders } from '../../../generated/models/Cr590_workordersModel'
 import { Cr590_workorderscr590_priority, Cr590_workorderscr590_status } from '../../../generated/models/Cr590_workordersModel'
 import {
+  PRIORITY,
   WORK_ORDER_STATUS,
   type AssignmentEvent,
   type DepartmentOption,
@@ -426,27 +427,93 @@ function normalizeRecordId(id: string, label: string): string {
   return normalized
 }
 
+export type ServerWorkOrderQueryPreset =
+  | 'active-overdue'
+  | 'critical-open'
+  | 'unassigned-new'
+  | 'high-priority-in-progress'
+
+export interface ServerWorkOrderQueryResult {
+  preset: ServerWorkOrderQueryPreset
+  label: string
+  filter: string
+  orders: WorkOrder[]
+}
+
+const ACTIVE_STATUS_FILTER = `(cr590_status eq ${WORK_ORDER_STATUS.assigned} or cr590_status eq ${WORK_ORDER_STATUS.inProgress} or cr590_status eq ${WORK_ORDER_STATUS.onHold})`
+
+function buildServerWorkOrderFilter(preset: ServerWorkOrderQueryPreset): { label: string; filter: string; orderBy: string[] } {
+  const now = new Date().toISOString()
+  switch (preset) {
+    case 'active-overdue':
+      return {
+        label: '活动逾期工单',
+        filter: [
+          '(statecode eq 0)',
+          '(cr590_expectedcompletiontime ne null)',
+          `(cr590_expectedcompletiontime lt ${now})`,
+          ACTIVE_STATUS_FILTER,
+        ].join(' and '),
+        orderBy: ['cr590_expectedcompletiontime asc'],
+      }
+    case 'critical-open':
+      return {
+        label: '紧急且未关闭工单',
+        filter: [
+          '(statecode eq 0)',
+          `(cr590_priority eq ${PRIORITY.critical})`,
+          `(cr590_status ne ${WORK_ORDER_STATUS.closed} and cr590_status ne ${WORK_ORDER_STATUS.cancelled})`,
+        ].join(' and '),
+        orderBy: ['cr590_createtime desc'],
+      }
+    case 'unassigned-new':
+      return {
+        label: '待分派新工单',
+        filter: [
+          '(statecode eq 0)',
+          `(cr590_status eq ${WORK_ORDER_STATUS.new})`,
+          '(_cr590_assignedto_value eq null)',
+        ].join(' and '),
+        orderBy: ['cr590_createtime desc'],
+      }
+    case 'high-priority-in-progress':
+      return {
+        label: '高优先级处理中',
+        filter: [
+          '(statecode eq 0)',
+          `(cr590_status eq ${WORK_ORDER_STATUS.inProgress})`,
+          `(cr590_priority eq ${PRIORITY.high} or cr590_priority eq ${PRIORITY.critical})`,
+        ].join(' and '),
+        orderBy: ['cr590_expectedcompletiontime asc'],
+      }
+  }
+}
+
 /**
- * Server-side overdue query via Dataverse $filter.
+ * Server-side Dataverse $filter presets.
  * Demonstrates Code Apps querying beyond client-side snapshot filtering (vs Power Fx delegation limits).
  */
-export async function loadActiveOverdueWorkOrdersFromDataverse(): Promise<WorkOrder[]> {
-  const now = new Date().toISOString()
-  const filter = [
-    '(statecode eq 0)',
-    '(cr590_expectedcompletiontime ne null)',
-    `(cr590_expectedcompletiontime lt ${now})`,
-    `(cr590_status eq ${WORK_ORDER_STATUS.assigned} or cr590_status eq ${WORK_ORDER_STATUS.inProgress} or cr590_status eq ${WORK_ORDER_STATUS.onHold})`,
-  ].join(' and ')
-
+export async function loadWorkOrdersByServerPreset(preset: ServerWorkOrderQueryPreset): Promise<ServerWorkOrderQueryResult> {
+  const query = buildServerWorkOrderFilter(preset)
   const rows = await readAllSourceRows('cr590_workorders', (skipToken) => Cr590_workordersService.getAll({
     select: WORK_ORDER_SELECT,
-    filter,
-    orderBy: ['cr590_expectedcompletiontime asc'],
+    filter: query.filter,
+    orderBy: query.orderBy,
     maxPageSize: PAGE_SIZE,
     ...(skipToken ? { skipToken } : {}),
   }))
-  return rows.map((record) => mapWorkOrder(record as WorkOrderRecord))
+  return {
+    preset,
+    label: query.label,
+    filter: query.filter,
+    orders: rows.map((record) => mapWorkOrder(record as WorkOrderRecord)),
+  }
+}
+
+/** @deprecated Prefer loadWorkOrdersByServerPreset('active-overdue') */
+export async function loadActiveOverdueWorkOrdersFromDataverse(): Promise<WorkOrder[]> {
+  const result = await loadWorkOrdersByServerPreset('active-overdue')
+  return result.orders
 }
 
 /** Reads only the target order, employee, and that employee's active workload before assignment. */

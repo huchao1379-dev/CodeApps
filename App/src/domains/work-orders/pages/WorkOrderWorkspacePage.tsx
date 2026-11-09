@@ -13,7 +13,11 @@ import {
   type WorkOrderStatus,
   type WorkOrderStoreState,
 } from '../types/workOrder.types'
-import { loadActiveOverdueWorkOrdersFromDataverse, loadWorkOrderAssignmentSnapshot, loadWorkOrderStateFromDataverse } from '../services/dataverseWorkOrderRepository'
+import {
+  loadWorkOrderAssignmentSnapshot,
+  loadWorkOrderStateFromDataverse,
+  loadWorkOrdersByServerPreset,
+} from '../services/dataverseWorkOrderRepository'
 import { loadAssignmentApprovalRequests, loadPendingAssignmentCounts, type AssignmentApprovalRequest } from '../services/assignmentApprovalRepository'
 import { getAssignmentApprovalStatusLabel } from '../config/assignmentApprovalChoices'
 import { submitAssignmentApprovalRequest } from '../../../integrations/power-automate/assignmentApprovalAdapter'
@@ -46,6 +50,7 @@ import {
   Pagination,
   SearchInput,
   StatusBadge,
+  Timeline,
   Toast,
   useOverlayFocus,
 } from '../../../shared/components'
@@ -54,15 +59,18 @@ import { AppHeader, AppLayout, AppSidebar, PageContainer } from '../../../workbe
 import {
   NavIconApprovals,
   NavIconDispatch,
+  NavIconInventory,
   NavIconOverview,
   NavIconResources,
   NavIconWorkOrders,
 } from '../../../workbench/navigation/NavIcons'
+import { WorkspaceSwitcher, type WorkspaceId } from '../../../workbench/workspace'
 import { WorkOrderDispatchBoard } from '../components/WorkOrderDispatchBoard'
 import { WorkOrderOperationsDashboard } from '../components/WorkOrderOperationsDashboard'
 import { AssignmentApprovalRequestsPage } from '../components/AssignmentApprovalRequestsPage'
 import { WorkOrderBatchActionDialog, type WorkOrderBatchAction, type WorkOrderBatchActionInput } from '../components/WorkOrderBatchActionDialog'
 import { RelatedMaterialsPanel } from '../components/RelatedMaterialsPanel'
+import { InventoryWorkspacePanel, type InventoryView } from '../../inventory/pages/InventoryWorkspacePanel'
 import './WorkOrderWorkspacePage.css'
 
 const emptyState: WorkOrderStoreState = {
@@ -272,17 +280,24 @@ function WorkOrderDetail({
         </section>
 
         <section className="detail-section"><div className="section-heading"><h3>工单历史</h3><span>{timeline.length} RECORDS</span></div>
-          {timeline.length > 0 ? <div className="timeline">{timeline.map((event) => <article className="timeline-row" key={event.id}>
-            <span className={`timeline-dot dot-${event.kind}`} />
-            <div className="timeline-content"><strong>{event.historyTypeLabel ?? event.kind}</strong><p>{event.description}</p>
-              {(event.previousStatusLabel || event.newStatusLabel || event.historyStatusLabel) && <small>
-                历史状态映射：{event.previousStatusLabel ?? '—'} → {event.newStatusLabel ?? '—'}{event.historyStatusLabel ? ` · 记录状态：${event.historyStatusLabel}` : ''}
-              </small>}
-              {event.remarks && <small>备注：{event.remarks}</small>}
-              <small>{event.historyNumber || '历史编号待生成'} · 操作人：{event.createdBy ?? '—'}</small>
-              <time>{formatDate(event.occurredAt)}</time>
-            </div>
-          </article>)}</div> : <p className="empty-history">这张工单暂无已读取的历史记录</p>}
+          <Timeline
+            ariaLabel="工单历史时间线"
+            emptyLabel="这张工单暂无已读取的历史记录"
+            items={timeline.map((event) => ({
+              id: event.id,
+              title: event.historyTypeLabel ?? event.kind,
+              description: event.description,
+              tone: event.kind,
+              time: formatDate(event.occurredAt),
+              meta: <>
+                {(event.previousStatusLabel || event.newStatusLabel || event.historyStatusLabel) && <small>
+                  历史状态映射：{event.previousStatusLabel ?? '—'} → {event.newStatusLabel ?? '—'}{event.historyStatusLabel ? ` · 记录状态：${event.historyStatusLabel}` : ''}
+                </small>}
+                {event.remarks && <small>备注：{event.remarks}</small>}
+                <small>{event.historyNumber || '历史编号待生成'} · 操作人：{event.createdBy ?? '—'}</small>
+              </>,
+            }))}
+          />
         </section>
   </DetailPanel>
 }
@@ -387,7 +402,9 @@ export default function WorkOrderWorkspacePage() {
   const [refreshToken, setRefreshToken] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedWorkOrderKeys, setSelectedWorkOrderKeys] = useState<string[]>([])
+  const [workspaceId, setWorkspaceId] = useState<WorkspaceId>('it-service')
   const [view, setView] = useState<View>('概览')
+  const [inventoryView, setInventoryView] = useState<InventoryView>('overview')
   const [resourceTab, setResourceTab] = useState<ResourceTab>('employees')
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
@@ -679,25 +696,27 @@ export default function WorkOrderWorkspacePage() {
     const isOverdueLink = filterLabel.includes('逾期')
     resetListFilters()
     setSelectedWorkOrderKeys([])
+    setWorkspaceId('it-service')
     setView('工单管理')
     setPage(1)
     if (!isOverdueLink) {
       setLinkedWorkOrderIds(workOrders.map((workOrder) => workOrder.id))
       setLinkedFilterLabel(filterLabel)
+      setServerFilterNote(null)
       return
     }
     setLinkedFilterLabel(filterLabel)
     setServerFilterNote('正在通过 Dataverse $filter 读取活动逾期工单…')
     setBusy(true)
-    void loadActiveOverdueWorkOrdersFromDataverse()
-      .then((serverOrders) => {
+    void loadWorkOrdersByServerPreset('active-overdue')
+      .then((result) => {
         setState((current) => {
           const byId = new Map(current.workOrders.map((item) => [item.id, item]))
-          serverOrders.forEach((item) => byId.set(item.id, item))
+          result.orders.forEach((item) => byId.set(item.id, item))
           return { ...current, workOrders: [...byId.values()] }
         })
-        setLinkedWorkOrderIds(serverOrders.map((item) => item.id))
-        setServerFilterNote(`服务端筛选：Dataverse $filter 活动逾期 · ${serverOrders.length} 张`)
+        setLinkedWorkOrderIds(result.orders.map((item) => item.id))
+        setServerFilterNote(`服务端筛选：Dataverse $filter 活动逾期 · ${result.orders.length} 张`)
       })
       .catch((queryError: unknown) => {
         setLinkedWorkOrderIds(workOrders.map((item) => item.id))
@@ -709,6 +728,31 @@ export default function WorkOrderWorkspacePage() {
       })
       .finally(() => setBusy(false))
   }
+
+  const handleWorkspaceChange = (nextWorkspace: WorkspaceId) => {
+    setWorkspaceId(nextWorkspace)
+    setSelectedId(null)
+    setDialog(null)
+    setBulkAction(null)
+    setResourceEditor(null)
+    setBulkResults(null)
+    setSeedDialogOpen(false)
+    setDialogError(null)
+    if (nextWorkspace === 'inventory') {
+      setInventoryView('overview')
+      return
+    }
+    setView('概览')
+  }
+
+  const inventoryViewLabel: Record<InventoryView, string> = {
+    overview: '库存概览',
+    ledger: '库存台账',
+    movements: '出入库',
+    locations: '库位',
+  }
+  const currentPageTitle = workspaceId === 'inventory' ? inventoryViewLabel[inventoryView] : view
+  const currentWorkspaceLabel = workspaceId === 'inventory' ? '库存管理工作台' : 'IT 服务运营'
 
   const requestBatchAction = (actionId: string) => {
     if (actionId === 'assign' || actionId === 'priority' || actionId === 'status' || actionId === 'cancel') {
@@ -904,7 +948,7 @@ export default function WorkOrderWorkspacePage() {
       const tag = target?.tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable
       if (event.key === '/' && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        if (view !== '工单管理' || dialog || bulkAction || resourceEditor || seedDialogOpen) return
+        if (workspaceId !== 'it-service' || view !== '工单管理' || dialog || bulkAction || resourceEditor || seedDialogOpen) return
         event.preventDefault()
         const input = document.querySelector<HTMLInputElement>('input[aria-label="搜索工单"]')
         input?.focus()
@@ -921,23 +965,48 @@ export default function WorkOrderWorkspacePage() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [view, dialog, bulkAction, resourceEditor, seedDialogOpen, selectedId, selectedWorkOrderKeys.length])
+  }, [workspaceId, view, dialog, bulkAction, resourceEditor, seedDialogOpen, selectedId, selectedWorkOrderKeys.length])
+
+  const itServiceNavItems = [{ id: 'workspace', label: '工作台', items: [
+    { id: 'overview', path: 'overview', label: '概览', icon: <NavIconOverview /> },
+    { id: 'work-orders', path: 'work-orders', label: '工单管理', icon: <NavIconWorkOrders />, badge: stats.total },
+    { id: 'dispatch', path: 'dispatch', label: '派发看板', icon: <NavIconDispatch />, badge: stats.new },
+    { id: 'approvals', path: 'approvals', label: '负责人申请', icon: <NavIconApprovals /> },
+    { id: 'resources', path: 'resources', label: '资源目录', icon: <NavIconResources />, children: [
+      { id: 'resource-employees', path: 'resources/employees', label: '员工', badge: state.employees?.length ?? 0 },
+      { id: 'resource-departments', path: 'resources/departments', label: '部门', badge: state.departments?.length ?? 0 },
+      { id: 'resource-categories', path: 'resources/categories', label: '服务类别', badge: state.serviceCategories?.length ?? 0 },
+    ] },
+  ] }]
+
+  const inventoryNavItems = [{ id: 'inventory-workspace', label: '库存工作台', items: [
+    { id: 'inv-overview', path: 'inventory/overview', label: '库存概览', icon: <NavIconOverview /> },
+    { id: 'inv-ledger', path: 'inventory/ledger', label: '库存台账', icon: <NavIconInventory /> },
+    { id: 'inv-movements', path: 'inventory/movements', label: '出入库', icon: <NavIconDispatch /> },
+    { id: 'inv-locations', path: 'inventory/locations', label: '库位', icon: <NavIconResources /> },
+  ] }]
+
+  const activePath = workspaceId === 'inventory'
+    ? `inventory/${inventoryView}`
+    : view === '概览' ? 'overview'
+      : view === '工单管理' ? 'work-orders'
+        : view === '派发看板' ? 'dispatch'
+          : view === '资源目录' ? `resources/${resourceTab}`
+            : 'approvals'
 
   return <AppLayout sidebarCollapsed={sidebarCollapsed} onSidebarCollapseChange={setSidebarCollapsed}
     sidebar={<AppSidebar
-      items={[{ id: 'workspace', label: '工作台', items: [
-        { id: 'overview', path: 'overview', label: '概览', icon: <NavIconOverview /> },
-        { id: 'work-orders', path: 'work-orders', label: '工单管理', icon: <NavIconWorkOrders />, badge: stats.total },
-        { id: 'dispatch', path: 'dispatch', label: '派发看板', icon: <NavIconDispatch />, badge: stats.new },
-        { id: 'approvals', path: 'approvals', label: '负责人申请', icon: <NavIconApprovals /> },
-        { id: 'resources', path: 'resources', label: '资源目录', icon: <NavIconResources />, children: [
-          { id: 'resource-employees', path: 'resources/employees', label: '员工', badge: state.employees?.length ?? 0 },
-          { id: 'resource-departments', path: 'resources/departments', label: '部门', badge: state.departments?.length ?? 0 },
-          { id: 'resource-categories', path: 'resources/categories', label: '服务类别', badge: state.serviceCategories?.length ?? 0 },
-        ] },
-      ] }]}
-      activePath={view === '概览' ? 'overview' : view === '工单管理' ? 'work-orders' : view === '派发看板' ? 'dispatch' : view === '资源目录' ? `resources/${resourceTab}` : 'approvals'} collapsed={sidebarCollapsed}
+      items={workspaceId === 'inventory' ? inventoryNavItems : itServiceNavItems}
+      activePath={activePath}
+      collapsed={sidebarCollapsed}
       onNavigate={(path) => {
+        if (workspaceId === 'inventory') {
+          if (path === 'inventory/overview') setInventoryView('overview')
+          else if (path === 'inventory/ledger') setInventoryView('ledger')
+          else if (path === 'inventory/movements') setInventoryView('movements')
+          else if (path === 'inventory/locations') setInventoryView('locations')
+          return
+        }
         if (path === 'resources') {
           setResourceTab('employees')
           setView('资源目录')
@@ -949,18 +1018,18 @@ export default function WorkOrderWorkspacePage() {
         }
       }}
       brand={<div className="brand-lockup"><div className="brand-mark"><span /><span /><span /><span /></div><div><strong>opsdesk</strong><small>OPERATIONS WORKBENCH</small></div></div>}
-      workspace={<div className="workspace-switch"><div className="workspace-avatar">IT</div><div><span>工作区</span><strong>IT 服务运营</strong></div><span className="switch-caret">⌄</span></div>}
+      workspace={<WorkspaceSwitcher value={workspaceId} onChange={handleWorkspaceChange} />}
       footer={<div className="profile-card"><div className="profile-avatar">A</div><div><strong>Code Apps 用户</strong><span>Dataverse 当前身份</span></div></div>}
     />}
-    header={<AppHeader breadcrumbs={<div className="breadcrumbs"><span>工作台</span><b>/</b><strong>{view}</strong></div>}
+    header={<AppHeader breadcrumbs={<div className="breadcrumbs"><span>{currentWorkspaceLabel}</span><b>/</b><strong>{currentPageTitle}</strong></div>}
       actions={<div className="topbar-actions"><Avatar small name="A" /></div>} />}
   >
-      {!loading && state.readWarnings && state.readWarnings.length > 0 && <div className="dataverse-read-warning" role="status">
+      {workspaceId === 'it-service' && !loading && state.readWarnings && state.readWarnings.length > 0 && <div className="dataverse-read-warning" role="status">
         <strong>部分辅助数据源读取失败：</strong> {state.readWarnings.join(' ')}
       </div>}
-      {error && state.workOrders.length > 0 && <div className="dataverse-read-warning warning-error" role="alert"><strong>刷新失败：</strong> {error}</div>}
+      {workspaceId === 'it-service' && error && state.workOrders.length > 0 && <div className="dataverse-read-warning warning-error" role="alert"><strong>刷新失败：</strong> {error}</div>}
       {notice && <Toast kind={notice.kind} message={notice.message} onDismiss={() => setNotice(null)} />}
-      {bulkResults && <section className="bulk-results" role={bulkResults.some((item) => !item.success) ? 'alert' : 'status'} aria-label="批量操作结果">
+      {workspaceId === 'it-service' && bulkResults && <section className="bulk-results" role={bulkResults.some((item) => !item.success) ? 'alert' : 'status'} aria-label="批量操作结果">
         <header><div><strong>批量操作结果</strong><span>{bulkResults.filter((item) => item.success && !item.pendingApproval).length} 已执行 · {bulkResults.filter((item) => item.pendingApproval).length} 待审批 · {bulkResults.filter((item) => !item.success && !item.partial).length} 失败 · {bulkResults.filter((item) => item.partial).length} 部分成功</span></div>
           <div className="bulk-results-actions">
             {bulkResults.some((item) => !item.success) && lastBatchInput && <button className="button button-quiet" type="button" disabled={busy} onClick={retryFailedBulkResults}>仅重试失败项</button>}
@@ -971,20 +1040,32 @@ export default function WorkOrderWorkspacePage() {
         </li>)}</ul>
       </section>}
 
-      <PageContainer eyebrow="SERVICE OPERATIONS" title={view}
-        description={view === '概览' ? '查看工单规模、SLA 风险、工程师负载与处理趋势。' : view === '工单管理' ? '管理工单字段、跨记录操作和业务历史。' : view === '派发看板' ? '按实时工作负载和接单状态安排工程师任务。' : view === '负责人申请' ? '集中查看负责人变更申请、审批状态和处理结果。' : '核对员工、部门与服务类别的当前 Dataverse 字段。'}
-        actions={<div className="page-header-actions">
+      <PageContainer
+        eyebrow={workspaceId === 'inventory' ? 'INVENTORY OPERATIONS' : 'SERVICE OPERATIONS'}
+        title={currentPageTitle}
+        description={workspaceId === 'inventory'
+          ? (inventoryView === 'overview' ? '查看库存规模、偏低与缺货概况。'
+            : inventoryView === 'ledger' ? '检索与筛选库存台账，查看物资明细。'
+              : inventoryView === 'movements' ? '出入库流水占位，后续可接入领用与调拨记录。'
+                : '按库位汇总存放位置与风险项。')
+          : view === '概览' ? '查看工单规模、SLA 风险、工程师负载与处理趋势。'
+            : view === '工单管理' ? '管理工单字段、跨记录操作和业务历史。'
+              : view === '派发看板' ? '按实时工作负载和接单状态安排工程师任务。'
+                : view === '负责人申请' ? '集中查看负责人变更申请、审批状态和处理结果。'
+                  : '核对员工、部门与服务类别的当前 Dataverse 字段。'}
+        actions={workspaceId === 'it-service' ? <div className="page-header-actions">
           <button className="button button-quiet seed-data-trigger" type="button" onClick={() => setSeedDialogOpen(true)} disabled={loading || busy}>添加 IT 演练数据</button>
           <button className="button button-quiet" type="button" onClick={() => setRefreshToken((value) => value + 1)} disabled={loading || busy}>{loading ? '读取中…' : '重新读取'}</button>
           {(view === '概览' || view === '工单管理') && <button className="button button-primary create-button" disabled={busy || activeDepartments.length === 0 || activeCategories.length === 0}
             title={activeDepartments.length === 0 || activeCategories.length === 0 ? '需要有效的部门和服务类别记录' : undefined}
             onClick={() => { setSelectedId(null); openDialog('create') }}><span className="plus-mark">＋</span>新建工单</button>}
-        </div>}>
+        </div> : undefined}>
 
-        {view === '概览' && <WorkOrderOperationsDashboard loading={loading} error={error}
+        {workspaceId === 'inventory' && <InventoryWorkspacePanel view={inventoryView} />}
+        {workspaceId === 'it-service' && view === '概览' && <WorkOrderOperationsDashboard loading={loading} error={error}
           onRetry={() => setRefreshToken((value) => value + 1)} workOrders={state.workOrders} employees={state.employees ?? []}
           departments={state.departments ?? []} serviceCategories={state.serviceCategories ?? []} onOpenWorkOrders={openLinkedWorkOrders} />}
-        {view === '工单管理' && <>
+        {workspaceId === 'it-service' && view === '工单管理' && <>
           <section className="metrics-grid" aria-label="工单概览">
             <MetricCard label="全部工单" value={stats.total} detail="当前读取记录" tone="purple" />
             <MetricCard label="待分派" value={stats.new} detail="需要安排负责人" tone="amber" />
@@ -1032,16 +1113,16 @@ export default function WorkOrderWorkspacePage() {
             </footer>
           </section>
         </>}
-        {view === '派发看板' && <WorkOrderDispatchBoard workOrders={state.workOrders} employees={state.employees ?? []}
+        {workspaceId === 'it-service' && view === '派发看板' && <WorkOrderDispatchBoard workOrders={state.workOrders} employees={state.employees ?? []}
           onRequestAssignment={requestDragAssignment} onOpenWorkOrder={(workOrder) => setSelectedId(workOrder.id)} />}
-        {view === '负责人申请' && <AssignmentApprovalRequestsPage active refreshToken={refreshToken}
+        {workspaceId === 'it-service' && view === '负责人申请' && <AssignmentApprovalRequestsPage active refreshToken={refreshToken}
           onRefresh={() => setRefreshToken((value) => value + 1)}
           onOpenWorkOrder={(workOrderId) => { setSelectedId(workOrderId); setView('工单管理') }} />}
-        {view === '资源目录' && <ResourceDirectory state={state} tab={resourceTab} query={resourceSearch} loading={loading}
+        {workspaceId === 'it-service' && view === '资源目录' && <ResourceDirectory state={state} tab={resourceTab} query={resourceSearch} loading={loading}
           onQueryChange={setResourceSearch} onEditResource={(resource) => { setDialogError(null); setResourceEditor(resource) }} />}
       </PageContainer>
 
-    {selectedWorkOrder && <WorkOrderDetail key={`${selectedWorkOrder.id}-${refreshToken}`} workOrder={selectedWorkOrder} state={state} disabled={busy}
+    {workspaceId === 'it-service' && selectedWorkOrder && <WorkOrderDetail key={`${selectedWorkOrder.id}-${refreshToken}`} workOrder={selectedWorkOrder} state={state} disabled={busy}
       onClose={() => setSelectedId(null)} onEdit={() => openDialog('edit')} onAssign={() => openDialog('assign')}
       onUnassign={() => openDialog('unassign')} onChangeStatus={() => openDialog('status')} />}
 
