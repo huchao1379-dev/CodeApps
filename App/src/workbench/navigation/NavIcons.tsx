@@ -44,3 +44,24 @@ export const NavIconInventory = () => <Icon>
   <path d="M4 7.2 10 4l6 3.2v8.3L10 18.5 4 15.5V7.2Z" {...stroke} />
   <path d="M10 10.2V18.5M4 7.2 10 10.2 16 7.2" {...stroke} />
 </Icon>
+
+export const NavIconAlerts = () => <Icon>
+  <path d="M10 3.5 16.5 15.5H3.5L10 3.5Z" {...stroke} />
+  <path d="M10 8.2v3.2M10 13.5h.01" {...stroke} />
+</Icon>
+
+export const NavIconStocktake = () => <Icon>
+  <rect x="4" y="3.5" width="12" height="13" rx="1.5" {...stroke} />
+  <path d="M7 7.5h6M7 10.5h6M7 13.5h3.5" {...stroke} />
+</Icon>
+
+export const NavIconReplenish = () => <Icon>
+  <path d="M4 13.5h8.5l2.5-5H7.2L4 13.5Z" {...stroke} />
+  <path d="M7.5 8.5V4.5M7.5 4.5 5.8 6.2M7.5 4.5 9.2 6.2" {...stroke} />
+</Icon>
+
+export const NavIconBatches = () => <Icon>
+  <rect x="3.5" y="5" width="5.5" height="10" rx="1" {...stroke} />
+  <rect x="11" y="5" width="5.5" height="10" rx="1" {...stroke} />
+  <path d="M5.2 8h2.2M5.2 11h2.2M12.7 8h2.2M12.7 11h2.2" {...stroke} />
+</Icon>

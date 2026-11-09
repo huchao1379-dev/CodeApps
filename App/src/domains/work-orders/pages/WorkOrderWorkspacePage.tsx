@@ -57,11 +57,15 @@ import {
 import type { BulkAction, DatePeriod, FilterDefinition, FilterValues, SortState, TableColumn } from '../../../shared/components'
 import { AppHeader, AppLayout, AppSidebar, PageContainer } from '../../../workbench/layout'
 import {
+  NavIconAlerts,
   NavIconApprovals,
+  NavIconBatches,
   NavIconDispatch,
   NavIconInventory,
   NavIconOverview,
+  NavIconReplenish,
   NavIconResources,
+  NavIconStocktake,
   NavIconWorkOrders,
 } from '../../../workbench/navigation/NavIcons'
 import { WorkspaceSwitcher, type WorkspaceId } from '../../../workbench/workspace'
@@ -428,6 +432,10 @@ export default function WorkOrderWorkspacePage() {
   const [workspaceId, setWorkspaceId] = useState<WorkspaceId>('it-service')
   const [view, setView] = useState<View>('概览')
   const [inventoryView, setInventoryView] = useState<InventoryView>('overview')
+  const [inventoryCreateToken, setInventoryCreateToken] = useState(0)
+  const [inventoryResetToken, setInventoryResetToken] = useState(0)
+  const [inventoryScanToken, setInventoryScanToken] = useState(0)
+  const [inventoryStocktakeToken, setInventoryStocktakeToken] = useState(0)
   const [resourceTab, setResourceTab] = useState<ResourceTab>('employees')
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
@@ -784,6 +792,10 @@ export default function WorkOrderWorkspacePage() {
     ledger: '库存台账',
     movements: '出入库',
     locations: '库位',
+    alerts: '预警中心',
+    stocktake: '库位盘点',
+    replenish: '补货计划',
+    batches: '批次效期',
   }
   const currentPageTitle = workspaceId === 'inventory' ? inventoryViewLabel[inventoryView] : view
   const currentWorkspaceLabel = workspaceId === 'inventory' ? '库存管理工作台' : 'IT 服务运营'
@@ -1018,6 +1030,10 @@ export default function WorkOrderWorkspacePage() {
     { id: 'inv-ledger', path: 'inventory/ledger', label: '库存台账', icon: <NavIconInventory /> },
     { id: 'inv-movements', path: 'inventory/movements', label: '出入库', icon: <NavIconDispatch /> },
     { id: 'inv-locations', path: 'inventory/locations', label: '库位', icon: <NavIconResources /> },
+    { id: 'inv-alerts', path: 'inventory/alerts', label: '预警中心', icon: <NavIconAlerts /> },
+    { id: 'inv-replenish', path: 'inventory/replenish', label: '补货计划', icon: <NavIconReplenish /> },
+    { id: 'inv-batches', path: 'inventory/batches', label: '批次效期', icon: <NavIconBatches /> },
+    { id: 'inv-stocktake', path: 'inventory/stocktake', label: '库位盘点', icon: <NavIconStocktake /> },
   ] }]
 
   const activePath = workspaceId === 'inventory'
@@ -1039,6 +1055,10 @@ export default function WorkOrderWorkspacePage() {
           else if (path === 'inventory/ledger') setInventoryView('ledger')
           else if (path === 'inventory/movements') setInventoryView('movements')
           else if (path === 'inventory/locations') setInventoryView('locations')
+          else if (path === 'inventory/alerts') setInventoryView('alerts')
+          else if (path === 'inventory/replenish') setInventoryView('replenish')
+          else if (path === 'inventory/batches') setInventoryView('batches')
+          else if (path === 'inventory/stocktake') setInventoryView('stocktake')
           return
         }
         if (path === 'resources') {
@@ -1078,16 +1098,29 @@ export default function WorkOrderWorkspacePage() {
         eyebrow={workspaceId === 'inventory' ? 'INVENTORY OPERATIONS' : 'SERVICE OPERATIONS'}
         title={currentPageTitle}
         description={workspaceId === 'inventory'
-          ? (inventoryView === 'overview' ? '查看库存规模、偏低与缺货概况。'
-            : inventoryView === 'ledger' ? '检索与筛选库存台账，查看物资明细。'
-              : inventoryView === 'movements' ? '出入库流水占位，后续可接入领用与调拨记录。'
-                : '按库位汇总存放位置与风险项。')
+          ? (inventoryView === 'overview' ? '库存估值、预警、补货与盘点总览，突出实物库存能力。'
+            : inventoryView === 'ledger' ? '检索筛选台账，执行入库、领用、调拨、预留与批量操作。'
+              : inventoryView === 'movements' ? '查看入库、领用、调拨、调整与预留等完整流水。'
+                : inventoryView === 'locations' ? '按库位查看容量利用率、管理员与风险项。'
+                  : inventoryView === 'alerts' ? '缺货、警戒线、批次临期/过期与库位超容预警。'
+                    : inventoryView === 'replenish' ? '按警戒线生成补货建议量与采购估价。'
+                      : inventoryView === 'batches' ? '批次追溯与临期优先出库管理。'
+                        : '库位实物盘点：录入实盘、复核差异并过账调整。')
           : view === '概览' ? '查看工单规模、SLA 风险、工程师负载与处理趋势。'
             : view === '工单管理' ? '管理工单字段、跨记录操作和业务历史。'
               : view === '派发看板' ? '按实时工作负载和接单状态安排工程师任务。'
                 : view === '负责人申请' ? '集中查看负责人变更申请、审批状态和处理结果。'
                   : '核对员工、部门与服务类别的当前 Dataverse 字段。'}
-        actions={workspaceId === 'it-service' ? <div className="page-header-actions">
+        actions={workspaceId === 'inventory' ? <div className="page-header-actions">
+          <button className="button button-quiet" type="button" onClick={() => setInventoryResetToken((value) => value + 1)}>重置样例数据</button>
+          <button className="button button-quiet" type="button" onClick={() => setInventoryScanToken((value) => value + 1)}>SKU 扫码</button>
+          {inventoryView === 'stocktake'
+            ? <button className="button button-primary create-button" type="button" onClick={() => setInventoryStocktakeToken((value) => value + 1)}>发起盘点</button>
+            : <button className="button button-primary create-button" type="button" onClick={() => {
+              setInventoryView('ledger')
+              setInventoryCreateToken((value) => value + 1)
+            }}><span className="plus-mark">＋</span>新建物资</button>}
+        </div> : workspaceId === 'it-service' ? <div className="page-header-actions">
           <button className="button button-quiet seed-data-trigger" type="button" onClick={() => setSeedDialogOpen(true)} disabled={loading || busy}>添加 IT 演练数据</button>
           <button className="button button-quiet" type="button" onClick={() => setRefreshToken((value) => value + 1)} disabled={loading || busy}>{loading ? '读取中…' : '重新读取'}</button>
           {(view === '概览' || view === '工单管理') && <button className="button button-primary create-button" disabled={busy || activeDepartments.length === 0 || activeCategories.length === 0}
@@ -1095,7 +1128,14 @@ export default function WorkOrderWorkspacePage() {
             onClick={() => { setSelectedId(null); openDialog('create') }}><span className="plus-mark">＋</span>新建工单</button>}
         </div> : undefined}>
 
-        {workspaceId === 'inventory' && <InventoryWorkspacePanel view={inventoryView} />}
+        {workspaceId === 'inventory' && <InventoryWorkspacePanel
+          view={inventoryView}
+          createRequestToken={inventoryCreateToken}
+          resetRequestToken={inventoryResetToken}
+          scanRequestToken={inventoryScanToken}
+          stocktakeRequestToken={inventoryStocktakeToken}
+          onNavigate={setInventoryView}
+        />}
         {workspaceId === 'it-service' && view === '概览' && <WorkOrderOperationsDashboard loading={loading} error={error}
           onRetry={() => setRefreshToken((value) => value + 1)} workOrders={state.workOrders} employees={state.employees ?? []}
           departments={state.departments ?? []} serviceCategories={state.serviceCategories ?? []} onOpenWorkOrders={openLinkedWorkOrders} />}

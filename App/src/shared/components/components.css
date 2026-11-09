@@ -8,11 +8,12 @@
   color: var(--color-text-primary);
   background: var(--color-surface);
   font: inherit;
+  font-size: 13px;
 }
 
 .ui-search-field { display: flex; min-width: 0; align-items: center; gap: 9px; padding: 0 10px; }
-.ui-search-icon { color: var(--color-text-muted); font-size: 19px; line-height: 1; }
-.ui-search-input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; }
+.ui-search-icon { color: var(--color-text-muted); font-size: 15px; line-height: 1; }
+.ui-search-input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; font-size: 13px; }
 .ui-search-input:focus-visible { outline: 0; }
 .ui-search-input::placeholder { color: var(--color-text-disabled); }
 .ui-search-clear { display: grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 50%; color: var(--color-text-muted); background: transparent; font-size: 17px; }
