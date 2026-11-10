@@ -12,6 +12,8 @@ export * as Cr590_table1sModel from './models/Cr590_table1sModel';
 export * as Cr590_table2sModel from './models/Cr590_table2sModel';
 export * as Cr590_tablesModel from './models/Cr590_tablesModel';
 export * as Cr590_workordersModel from './models/Cr590_workordersModel';
+export * as SystemuserrolescollectionModel from './models/SystemuserrolescollectionModel';
+export * as RolesModel from './models/RolesModel';
 export * as WorkOrderMaterialsModel from './models/WorkOrderMaterialsModel';
 export * as _e8187cbfModel from './models/_e8187cbfModel';
 
@@ -23,5 +25,7 @@ export * from './services/Cr590_table1sService';
 export * from './services/Cr590_table2sService';
 export * from './services/Cr590_tablesService';
 export * from './services/Cr590_workordersService';
+export * from './services/SystemuserrolescollectionService';
+export * from './services/RolesService';
 export * from './services/WorkOrderMaterialsService';
 export * from './services/_e8187cbfService';

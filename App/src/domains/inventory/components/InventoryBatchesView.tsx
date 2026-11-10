@@ -42,6 +42,9 @@ export function InventoryBatchesView({
   batches,
   items,
   locations,
+  canIssue = true,
+  canReceive = true,
+  canEdit = true,
   onIssuePrefer,
   onReceive,
   onOpenItem,
@@ -49,6 +52,9 @@ export function InventoryBatchesView({
   batches: InventoryBatch[]
   items: InventoryItem[]
   locations: string[]
+  canIssue?: boolean
+  canReceive?: boolean
+  canEdit?: boolean
   onIssuePrefer: (batch: InventoryBatch) => void
   onReceive: (item: InventoryItem) => void
   onOpenItem: (item: InventoryItem) => void
@@ -197,6 +203,8 @@ export function InventoryBatchesView({
             <button
               className="button button-primary inventory-mini-button"
               type="button"
+              disabled={!canIssue}
+              title={!canIssue ? '当前角色无领用权限' : undefined}
               onClick={() => onIssuePrefer(batch)}
             >
               {batch.status === 'expired' ? '隔离出库' : '临期领用'}
@@ -303,15 +311,33 @@ export function InventoryBatchesView({
       footer={selectedBatch ? <div className="inventory-detail-actions">
         {selectedItem && <>
           {(selectedBatch.status === 'expiring' || selectedBatch.status === 'expired') && selectedBatch.quantity > 0 && (
-            <button className="button button-quiet" type="button" onClick={() => onIssuePrefer(selectedBatch)}>
+            <button
+              className="button button-quiet"
+              type="button"
+              disabled={!canIssue}
+              title={!canIssue ? '当前角色无领用权限' : undefined}
+              onClick={() => onIssuePrefer(selectedBatch)}
+            >
               {selectedBatch.status === 'expired' ? '隔离出库' : '临期领用'}
             </button>
           )}
-          <button className="button button-quiet" type="button" onClick={() => onReceive(selectedItem)}>补货入库</button>
-          <button className="button button-primary" type="button" onClick={() => {
-            setSelectedBatchId(null)
-            onOpenItem(selectedItem)
-          }}>跳转物资台账</button>
+          <button
+            className="button button-quiet"
+            type="button"
+            disabled={!canReceive}
+            title={!canReceive ? '当前角色无入库权限' : undefined}
+            onClick={() => onReceive(selectedItem)}
+          >补货入库</button>
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={!canEdit}
+            title={!canEdit ? '当前角色无编辑权限' : undefined}
+            onClick={() => {
+              setSelectedBatchId(null)
+              onOpenItem(selectedItem)
+            }}
+          >跳转物资台账</button>
         </>}
       </div> : undefined}
     >

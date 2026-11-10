@@ -76,6 +76,15 @@
           "entitySetName": "cr590_assignmentapprovalrequests",
           "logicalName": "cr590_assignmentapprovalrequest",
           "isHidden": false
+        },
+        "systemuserroles": {
+          "entitySetName": "systemuserrolescollection",
+          "logicalName": "systemuserroles"
+        },
+        "role": {
+          "entitySetName": "roles",
+          "logicalName": "role",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

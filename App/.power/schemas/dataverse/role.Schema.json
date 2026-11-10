@@ -1,0 +1,51 @@
+{
+  "name": "role",
+  "title": "role",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "x-ms-dataverse-entity": true,
+      "x-ms-dataverse-entityset": "roles",
+      "x-ms-dataverse-primary-id": "roleid",
+      "x-ms-dataverse-primary-name": "name",
+      "properties": {
+        "roleid": {
+          "type": "string",
+          "title": "roleid",
+          "x-ms-dataverse-attribute": "roleid",
+          "x-ms-dataverse-type": "UniqueidentifierType",
+          "x-ms-schema-name": "RoleId",
+          "x-ms-dataverse-primary-id": true,
+          "required": true,
+          "x-ms-keyType": "primary"
+        },
+        "name": {
+          "type": "string",
+          "title": "name",
+          "x-ms-dataverse-attribute": "name",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "Name",
+          "x-ms-dataverse-primary-name": true
+        },
+        "businessunitid": {
+          "type": "string",
+          "title": "businessunitid",
+          "x-ms-dataverse-attribute": "businessunitid",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "BusinessUnitId"
+        },
+        "_businessunitid_value": {
+          "type": "string",
+          "title": "_businessunitid_value",
+          "x-ms-dataverse-attribute": "_businessunitid_value",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "_businessunitid_value"
+        }
+      },
+      "required": [
+        "roleid"
+      ]
+    }
+  }
+}

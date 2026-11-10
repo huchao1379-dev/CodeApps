@@ -25,6 +25,8 @@ const formatDate = (value: string) => new Intl.DateTimeFormat('zh-CN', {
 export function InventoryStocktakeView({
   sessions,
   busy,
+  canStocktake = true,
+  canPost = true,
   onStart,
   onCountChange,
   onSubmitReview,
@@ -32,6 +34,8 @@ export function InventoryStocktakeView({
 }: {
   sessions: StocktakeSession[]
   busy: boolean
+  canStocktake?: boolean
+  canPost?: boolean
   onStart: () => void
   onCountChange: (sessionId: string, itemId: string, countedQuantity: number) => void
   onSubmitReview: (sessionId: string) => void
@@ -58,7 +62,13 @@ export function InventoryStocktakeView({
             </div>
             <p>录入实盘后提交复核；过账前按差异阈值（±{STOCKTAKE_VARIANCE_THRESHOLD}）确认</p>
           </div>
-          <button className="button button-primary" type="button" onClick={onStart}>发起盘点</button>
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={!canStocktake}
+            title={!canStocktake ? '当前角色无盘点权限' : undefined}
+            onClick={onStart}
+          >发起盘点</button>
         </div>
       </header>
 
@@ -117,12 +127,22 @@ export function InventoryStocktakeView({
           </div>
           <div className="inventory-toolbar-actions">
             {active.status !== 'posted' && <>
-              <button className="button button-quiet" type="button" disabled={busy} onClick={() => onSubmitReview(active.id)}>提交复核</button>
+              <button
+                className="button button-quiet"
+                type="button"
+                disabled={busy || !canStocktake}
+                title={!canStocktake ? '当前角色无盘点权限' : undefined}
+                onClick={() => onSubmitReview(active.id)}
+              >提交复核</button>
               <button
                 className="button button-primary"
                 type="button"
-                disabled={busy || analysis.pendingCount > 0}
-                title={analysis.pendingCount > 0 ? '仍有未录入实盘的物资' : undefined}
+                disabled={busy || !canPost || analysis.pendingCount > 0}
+                title={!canPost
+                  ? '当前角色无盘点过账权限'
+                  : analysis.pendingCount > 0
+                    ? '仍有未录入实盘的物资'
+                    : undefined}
                 onClick={() => onRequestPost(active.id)}
               >过账调整</button>
             </>}
@@ -165,7 +185,8 @@ export function InventoryStocktakeView({
                   className="inventory-count-input"
                   type="number"
                   min={0}
-                  disabled={busy || active.status === 'posted'}
+                  disabled={busy || !canStocktake || active.status === 'posted'}
+                  title={!canStocktake ? '当前角色无盘点权限' : undefined}
                   value={counted ?? ''}
                   onChange={(event) => onCountChange(active.id, line.itemId, Number(event.target.value))}
                 />

@@ -40,6 +40,20 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "systemuserrolescollection": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "systemuserroleid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "roles": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "roleid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cr590_workorders": {
     "tableId": "",
     "version": "",

@@ -650,10 +650,16 @@
   font: inherit;
   transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
-button.inventory-shortcut-card:hover {
+button.inventory-shortcut-card:hover:not(:disabled) {
   border-color: #7b6fd0;
   box-shadow: 0 8px 18px #1b243514;
   transform: translateY(-1px);
+}
+button.inventory-shortcut-card:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 .inventory-shortcut-card strong { font-size: 14px; }
 .inventory-shortcut-card p {

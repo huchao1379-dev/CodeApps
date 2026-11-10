@@ -1,0 +1,263 @@
+.access-panel { display: grid; gap: 16px; }
+.access-card {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+.access-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.access-card-header h2 { margin: 0; font-size: 16px; }
+.access-card-header p {
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  max-width: 720px;
+}
+.access-card-header code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--color-surface-muted);
+  font-size: 11px;
+}
+.access-header-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.access-active-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #f0edfc;
+  color: #5a52a8;
+  font-size: 12px;
+  font-weight: 600;
+}
+.access-user-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+}
+.access-user-grid dt {
+  margin: 0 0 4px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+.access-user-grid dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+.access-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.access-warning {
+  margin: 0 16px 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff1df;
+  color: #a85b12;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.access-role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+.access-role-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-muted);
+}
+.access-role-card.is-assigned { border-color: color-mix(in srgb, #5b9bd5 45%, var(--color-border)); }
+.access-role-card.is-active {
+  border-color: #7b6fd0;
+  box-shadow: 0 0 0 2px #efeafc;
+  background: #fff;
+}
+.access-role-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+.access-role-badges { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.access-role-card p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.access-role-card small { color: var(--color-text-muted); font-size: 11px; }
+.access-role-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.access-permission-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px;
+}
+.access-permission-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.access-permission-chip.is-on {
+  color: #1f7a57;
+  background: #e8f6ef;
+}
+.access-permission-chip.is-off {
+  color: #8a93a1;
+  background: #f3f4f6;
+  text-decoration: line-through;
+}
+.access-permission-chip:hover {
+  outline: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  outline-offset: 1px;
+}
+.access-probe-result {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.access-probe-result.is-allowed {
+  color: #1f7a57;
+  background: #e8f6ef;
+}
+.access-probe-result.is-denied {
+  color: #b42318;
+  background: #fef3f2;
+}
+.access-probe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+.access-probe-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-muted);
+}
+.access-probe-card.is-on {
+  border-color: color-mix(in srgb, #2f8f6b 40%, var(--color-border));
+}
+.access-probe-card.is-off {
+  border-color: color-mix(in srgb, #b42318 28%, var(--color-border));
+}
+.access-probe-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+.access-probe-card p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.access-probe-card code {
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+.access-matrix-wrap {
+  overflow: auto;
+  padding: 0 16px 16px;
+}
+.access-matrix {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.access-matrix th,
+.access-matrix td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: center;
+}
+.access-matrix thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-weight: 650;
+}
+.access-matrix tbody th {
+  text-align: left;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.access-cell-on { color: #2f8f6b; font-weight: 700; }
+.access-cell-off { color: #b1bac5; }
+.access-note-card { padding: 16px; }
+.access-note-card h2 { margin: 0 0 10px; font-size: 16px; }
+.access-gate-card .access-user-grid { border-top: 1px solid var(--color-border); }
+.access-gate-loading,
+.access-gate-message {
+  margin: 0;
+  padding: 20px 16px 24px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.access-gate-denied .access-gate-message {
+  color: #b42318;
+  background: #fef3f2;
+}
+.access-gate-allowed {
+  border-color: color-mix(in srgb, #2f8f6b 35%, var(--color-border));
+}
+.access-gate-loading {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+}
+.access-note-card ol {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}

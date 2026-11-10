@@ -65,3 +65,9 @@ export const NavIconBatches = () => <Icon>
   <rect x="11" y="5" width="5.5" height="10" rx="1" {...stroke} />
   <path d="M5.2 8h2.2M5.2 11h2.2M12.7 8h2.2M12.7 11h2.2" {...stroke} />
 </Icon>
+
+export const NavIconAccess = () => <Icon>
+  <circle cx="10" cy="8" r="3" {...stroke} />
+  <path d="M4.5 16.2c.9-2.8 3-4.2 5.5-4.2s4.6 1.4 5.5 4.2" {...stroke} />
+  <path d="M14.2 4.8 16 6.6 14.2 8.4" {...stroke} />
+</Icon>

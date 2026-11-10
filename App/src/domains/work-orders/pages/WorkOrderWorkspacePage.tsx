@@ -57,6 +57,7 @@ import {
 import type { BulkAction, DatePeriod, FilterDefinition, FilterValues, SortState, TableColumn } from '../../../shared/components'
 import { AppHeader, AppLayout, AppSidebar, PageContainer } from '../../../workbench/layout'
 import {
+  NavIconAccess,
   NavIconAlerts,
   NavIconApprovals,
   NavIconBatches,
@@ -68,6 +69,9 @@ import {
   NavIconStocktake,
   NavIconWorkOrders,
 } from '../../../workbench/navigation/NavIcons'
+import { RolePermissionPage } from '../../access-control/pages/RolePermissionPage'
+import { useAccessControl } from '../../access-control/context/AccessControlContext'
+import { APP_PERMISSION_LABELS, getRoleDefinition, type AppPermission } from '../../access-control/types/access.types'
 import { WorkspaceSwitcher, type WorkspaceId } from '../../../workbench/workspace'
 import { WorkOrderDispatchBoard } from '../components/WorkOrderDispatchBoard'
 import { WorkOrderOperationsDashboard } from '../components/WorkOrderOperationsDashboard'
@@ -117,7 +121,7 @@ function getDatePeriodBounds(period: DatePeriod, anchorDate: string): { start: n
   return { start: start.getTime(), end: end.getTime() }
 }
 
-type View = '概览' | '工单管理' | '派发看板' | '资源目录' | '负责人申请'
+type View = '概览' | '工单管理' | '派发看板' | '资源目录' | '负责人申请' | '角色权限'
 type ResourceTab = 'employees' | 'departments' | 'categories'
 type DialogMode = 'create' | 'edit' | 'assign' | 'unassign' | 'status' | null
 
@@ -203,6 +207,10 @@ function WorkOrderDetail({
   workOrder,
   state,
   disabled,
+  canEdit = true,
+  canAssignAction = true,
+  canUnassignAction = true,
+  canChangeStatus = true,
   onClose,
   onEdit,
   onAssign,
@@ -212,6 +220,10 @@ function WorkOrderDetail({
   workOrder: WorkOrder
   state: WorkOrderStoreState
   disabled: boolean
+  canEdit?: boolean
+  canAssignAction?: boolean
+  canUnassignAction?: boolean
+  canChangeStatus?: boolean
   onClose: () => void
   onEdit: () => void
   onAssign: () => void
@@ -248,12 +260,32 @@ function WorkOrderDetail({
         <h2 className="detail-title">{workOrder.workOrderName}</h2>
         <p className="detail-description">{workOrder.issueDescription || '暂无问题描述'}</p>
         <div className="detail-actions">
-          {!terminal && <button className="button button-quiet" disabled={disabled} onClick={onEdit}>编辑</button>}
-          {canAssign && <button className="button button-primary" disabled={disabled || (state.employees ?? []).filter((item) => item.isActive && item.isAvailableForOrder).length === 0} onClick={onAssign}>
+          {!terminal && <button
+            className="button button-quiet"
+            disabled={disabled || !canEdit}
+            title={!canEdit ? '当前角色无编辑工单权限' : undefined}
+            onClick={onEdit}
+          >编辑</button>}
+          {canAssign && <button
+            className="button button-primary"
+            disabled={disabled || !canAssignAction || (state.employees ?? []).filter((item) => item.isActive && item.isAvailableForOrder).length === 0}
+            title={!canAssignAction ? '当前角色无派发权限' : undefined}
+            onClick={onAssign}
+          >
             {workOrder.assignedToId ? '转派' : '派发'}
           </button>}
-          {canUnassign && <button className="button button-quiet" disabled={disabled} onClick={onUnassign}>撤派</button>}
-          {canTransition && <button className="button button-quiet" disabled={disabled} onClick={onChangeStatus}>更新状态</button>}
+          {canUnassign && <button
+            className="button button-quiet"
+            disabled={disabled || !canUnassignAction}
+            title={!canUnassignAction ? '当前角色无撤派权限' : undefined}
+            onClick={onUnassign}
+          >撤派</button>}
+          {canTransition && <button
+            className="button button-quiet"
+            disabled={disabled || !canChangeStatus}
+            title={!canChangeStatus ? '当前角色无变更状态权限' : undefined}
+            onClick={onChangeStatus}
+          >更新状态</button>}
         </div>
 
         <section className="detail-section"><div className="section-heading"><h3>工单字段</h3><span>WORK ORDER</span></div>
@@ -329,11 +361,12 @@ function WorkOrderDetail({
   </DetailPanel>
 }
 
-function ResourceDirectory({ state, tab, query, loading, onQueryChange, onEditResource }: {
+function ResourceDirectory({ state, tab, query, loading, canEdit = true, onQueryChange, onEditResource }: {
   state: WorkOrderStoreState
   tab: ResourceTab
   query: string
   loading: boolean
+  canEdit?: boolean
   onQueryChange: (query: string) => void
   onEditResource: (resource: EditableResource) => void
 }) {
@@ -355,8 +388,19 @@ function ResourceDirectory({ state, tab, query, loading, onQueryChange, onEditRe
   useEffect(() => { setPage(1) }, [tab, query])
   useEffect(() => { if (page > pageCount) setPage(pageCount) }, [page, pageCount])
 
-  const editButton = (resource: EditableResource, label: string) => <button className="resource-edit-action" type="button" title={`编辑${label}`}
-    aria-label={`编辑${label}`} onClick={(event) => { event.stopPropagation(); onEditResource(resource) }}>✎</button>
+  const openEdit = (resource: EditableResource) => {
+    if (!canEdit) return
+    onEditResource(resource)
+  }
+
+  const editButton = (resource: EditableResource, label: string) => <button
+    className="resource-edit-action"
+    type="button"
+    aria-label={`编辑${label}`}
+    disabled={!canEdit}
+    title={!canEdit ? '当前角色无编辑资源权限' : `编辑${label}`}
+    onClick={(event) => { event.stopPropagation(); openEdit(resource) }}
+  >✎</button>
 
   const employeeColumns: TableColumn<EmployeeOption>[] = [
     { key: 'employeeName', title: '员工', width: 160, render: (_, employee) => <div className="assignee-cell"><Avatar small name={employee.employeeName} /><strong>{employee.employeeName}</strong></div> },
@@ -401,28 +445,31 @@ function ResourceDirectory({ state, tab, query, loading, onQueryChange, onEditRe
   const slice = <T,>(items: T[]) => items.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   return <section className="work-order-card resource-card">
-    <header className="list-header"><div><div className="list-title-row"><h2>{title}</h2><span className="result-count">{loading ? '…' : total}</span></div><p>复用共享 DataTable；单击记录行可编辑字段</p></div>
+    <header className="list-header"><div><div className="list-title-row"><h2>{title}</h2><span className="result-count">{loading ? '…' : total}</span></div><p>{canEdit ? '复用共享 DataTable；单击记录行可编辑字段' : '当前角色仅可查看资源目录，不可编辑'}</p></div>
       <SearchInput value={query} onChange={onQueryChange} placeholder="搜索名称、编号或说明" ariaLabel="搜索基础资源" />
     </header>
     {tab === 'employees' && <DataTable data={slice(employeeRows)} columns={employeeColumns} rowKey={(row) => row.id} ariaLabel="员工列表"
       loading={loading} loadingLabel="正在读取基础资源…" emptyTitle={normalized ? '没有匹配的记录' : '暂无资源记录'}
       emptyDescription={normalized ? '调整搜索词后再试。' : '该数据源当前没有可显示的记录。'}
-      onRowClick={(employee) => onEditResource({ type: 'employee', record: employee })}
+      onRowClick={(employee) => openEdit({ type: 'employee', record: employee })}
       pagination={pagination} onPaginationChange={onPaginationChange} />}
     {tab === 'departments' && <DataTable data={slice(departmentRows)} columns={departmentColumns} rowKey={(row) => row.id} ariaLabel="部门列表"
       loading={loading} loadingLabel="正在读取基础资源…" emptyTitle={normalized ? '没有匹配的记录' : '暂无资源记录'}
       emptyDescription={normalized ? '调整搜索词后再试。' : '该数据源当前没有可显示的记录。'}
-      onRowClick={(department) => onEditResource({ type: 'department', record: department })}
+      onRowClick={(department) => openEdit({ type: 'department', record: department })}
       pagination={pagination} onPaginationChange={onPaginationChange} />}
     {tab === 'categories' && <DataTable data={slice(categoryRows)} columns={categoryColumns} rowKey={(row) => row.id} ariaLabel="服务类别列表"
       loading={loading} loadingLabel="正在读取基础资源…" emptyTitle={normalized ? '没有匹配的记录' : '暂无资源记录'}
       emptyDescription={normalized ? '调整搜索词后再试。' : '该数据源当前没有可显示的记录。'}
-      onRowClick={(category) => onEditResource({ type: 'category', record: category })}
+      onRowClick={(category) => openEdit({ type: 'category', record: category })}
       pagination={pagination} onPaginationChange={onPaginationChange} />}
   </section>
 }
 
 export default function WorkOrderWorkspacePage() {
+  const { inventory, itService, can } = useAccessControl()
+  const activeInventoryRole = getRoleDefinition(inventory.activeRoleId)
+  const activeItRole = getRoleDefinition(itService.activeRoleId)
   const [state, setState] = useState<WorkOrderStoreState>(emptyState)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -456,6 +503,17 @@ export default function WorkOrderWorkspacePage() {
   const [dialogError, setDialogError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+  const denyIt = (permission: AppPermission) => {
+    setNotice({
+      kind: 'error',
+      message: `当前 IT 角色无「${APP_PERMISSION_LABELS[permission]}」权限。请到「角色权限」切换角色后重试。`,
+    })
+  }
+  const ensureIt = (permission: AppPermission) => {
+    if (can(permission)) return true
+    denyIt(permission)
+    return false
+  }
   const [bulkAction, setBulkAction] = useState<WorkOrderBatchAction | null>(null)
   const [pendingApprovalLoads, setPendingApprovalLoads] = useState<Map<string, number>>(new Map())
   const [pendingApprovalLoadsLoading, setPendingApprovalLoadsLoading] = useState(false)
@@ -539,15 +597,22 @@ export default function WorkOrderWorkspacePage() {
   const assignmentCandidates = useMemo(() => pendingAssignment ? [pendingAssignment.workOrder] : selectedWorkOrders, [pendingAssignment, selectedWorkOrders])
   const batchEligibleEmployees = (state.employees ?? []).filter((employee) => employee.isActive && employee.isAvailableForOrder)
   const batchActions: BulkAction[] = [
-    { id: 'assign', label: '批量调整负责人', icon: '↗' },
-    { id: 'priority', label: '修改优先级', icon: '↑' },
-    { id: 'status', label: '修改状态', icon: '◷' },
-    { id: 'cancel', label: '取消工单', icon: '×' },
+    { id: 'assign', label: '批量调整负责人', icon: '↗', disabled: !can('it.bulk') || !can('it.assign') },
+    { id: 'priority', label: '修改优先级', icon: '↑', disabled: !can('it.bulk') || !can('it.edit') },
+    { id: 'status', label: '修改状态', icon: '◷', disabled: !can('it.bulk') || !can('it.status') },
+    { id: 'cancel', label: '取消工单', icon: '×', disabled: !can('it.bulk') || !can('it.status') },
   ]
 
   useEffect(() => { setPage((current) => Math.min(current, pageCount)) }, [pageCount])
 
   const openDialog = (mode: DialogMode) => {
+    const permission: AppPermission | null = mode === 'create' ? 'it.create'
+      : mode === 'edit' ? 'it.edit'
+        : mode === 'assign' ? 'it.assign'
+          : mode === 'unassign' ? 'it.unassign'
+            : mode === 'status' ? 'it.status'
+              : null
+    if (permission && !ensureIt(permission)) return
     setDialogError(null)
     setDialog(mode)
   }
@@ -576,6 +641,7 @@ export default function WorkOrderWorkspacePage() {
   }
 
   const submitResourceEdit = async (input: ResourceEditValues) => {
+    if (!ensureIt('it.resources.edit')) return
     setBusy(true)
     setDialogError(null)
     try {
@@ -595,6 +661,7 @@ export default function WorkOrderWorkspacePage() {
   }
 
   const seedTestData = async () => {
+    if (!ensureIt('it.seed')) return
     setBusy(true)
     setNotice(null)
     setSeedPhase('checking')
@@ -796,12 +863,17 @@ export default function WorkOrderWorkspacePage() {
     stocktake: '库位盘点',
     replenish: '补货计划',
     batches: '批次效期',
+    roles: '角色权限',
   }
   const currentPageTitle = workspaceId === 'inventory' ? inventoryViewLabel[inventoryView] : view
   const currentWorkspaceLabel = workspaceId === 'inventory' ? '库存管理工作台' : 'IT 服务运营'
 
   const requestBatchAction = (actionId: string) => {
     if (actionId === 'assign' || actionId === 'priority' || actionId === 'status' || actionId === 'cancel') {
+      if (!ensureIt('it.bulk')) return
+      if (actionId === 'assign' && !ensureIt('it.assign')) return
+      if ((actionId === 'priority') && !ensureIt('it.edit')) return
+      if ((actionId === 'status' || actionId === 'cancel') && !ensureIt('it.status')) return
       setPendingAssignment(null)
       setBulkAction(actionId)
       if (actionId === 'assign') {
@@ -816,6 +888,7 @@ export default function WorkOrderWorkspacePage() {
   }
 
   const requestDragAssignment = (workOrder: WorkOrder, employee: EmployeeOption) => {
+    if (!ensureIt('it.assign')) return
     setSelectedWorkOrderKeys([])
     setPendingAssignment({ workOrder, employee })
     setBulkAction('assign')
@@ -1013,6 +1086,32 @@ export default function WorkOrderWorkspacePage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [workspaceId, view, dialog, bulkAction, resourceEditor, seedDialogOpen, selectedId, selectedWorkOrderKeys.length])
 
+  const openInventoryPermissionCheck = (nextView: 'ledger' | 'replenish' | 'stocktake' | 'batches' | 'alerts') => {
+    setWorkspaceId('inventory')
+    setInventoryView(nextView)
+    setSelectedId(null)
+    setDialog(null)
+    setBulkAction(null)
+    setResourceEditor(null)
+    setBulkResults(null)
+    setSeedDialogOpen(false)
+    setDialogError(null)
+  }
+
+  const openItPermissionCheck = (nextView: '工单管理' | '派发看板' | '负责人申请' | '资源目录') => {
+    setWorkspaceId('it-service')
+    setView(nextView)
+    setSelectedId(null)
+    setDialog(null)
+    setBulkAction(null)
+    setResourceEditor(null)
+    setBulkResults(null)
+    setSeedDialogOpen(false)
+    setDialogError(null)
+  }
+
+  const activeWorkspaceRole = workspaceId === 'inventory' ? activeInventoryRole : activeItRole
+
   const itServiceNavItems = [{ id: 'workspace', label: '工作台', items: [
     { id: 'overview', path: 'overview', label: '概览', icon: <NavIconOverview /> },
     { id: 'work-orders', path: 'work-orders', label: '工单管理', icon: <NavIconWorkOrders />, badge: stats.total },
@@ -1023,6 +1122,7 @@ export default function WorkOrderWorkspacePage() {
       { id: 'resource-departments', path: 'resources/departments', label: '部门', badge: state.departments?.length ?? 0 },
       { id: 'resource-categories', path: 'resources/categories', label: '服务类别', badge: state.serviceCategories?.length ?? 0 },
     ] },
+    { id: 'roles', path: 'roles', label: '角色权限', icon: <NavIconAccess /> },
   ] }]
 
   const inventoryNavItems = [{ id: 'inventory-workspace', label: '库存工作台', items: [
@@ -1034,6 +1134,7 @@ export default function WorkOrderWorkspacePage() {
     { id: 'inv-replenish', path: 'inventory/replenish', label: '补货计划', icon: <NavIconReplenish /> },
     { id: 'inv-batches', path: 'inventory/batches', label: '批次效期', icon: <NavIconBatches /> },
     { id: 'inv-stocktake', path: 'inventory/stocktake', label: '库位盘点', icon: <NavIconStocktake /> },
+    { id: 'inv-roles', path: 'inventory/roles', label: '角色权限', icon: <NavIconAccess /> },
   ] }]
 
   const activePath = workspaceId === 'inventory'
@@ -1042,7 +1143,8 @@ export default function WorkOrderWorkspacePage() {
       : view === '工单管理' ? 'work-orders'
         : view === '派发看板' ? 'dispatch'
           : view === '资源目录' ? `resources/${resourceTab}`
-            : 'approvals'
+            : view === '角色权限' ? 'roles'
+              : 'approvals'
 
   return <AppLayout sidebarCollapsed={sidebarCollapsed} onSidebarCollapseChange={setSidebarCollapsed}
     sidebar={<AppSidebar
@@ -1059,6 +1161,7 @@ export default function WorkOrderWorkspacePage() {
           else if (path === 'inventory/replenish') setInventoryView('replenish')
           else if (path === 'inventory/batches') setInventoryView('batches')
           else if (path === 'inventory/stocktake') setInventoryView('stocktake')
+          else if (path === 'inventory/roles') setInventoryView('roles')
           return
         }
         if (path === 'resources') {
@@ -1067,13 +1170,16 @@ export default function WorkOrderWorkspacePage() {
         } else if (path === 'resources/employees' || path === 'resources/departments' || path === 'resources/categories') {
           setResourceTab(path.slice('resources/'.length) as ResourceTab)
           setView('资源目录')
+        } else if (path === 'roles') {
+          setSelectedId(null)
+          setView('角色权限')
         } else {
           setView(path === 'dispatch' ? '派发看板' : path === 'work-orders' ? '工单管理' : path === 'approvals' ? '负责人申请' : '概览')
         }
       }}
       brand={<div className="brand-lockup"><div className="brand-mark"><span /><span /><span /><span /></div><div><strong>opsdesk</strong><small>OPERATIONS WORKBENCH</small></div></div>}
       workspace={<WorkspaceSwitcher value={workspaceId} onChange={handleWorkspaceChange} />}
-      footer={<div className="profile-card"><div className="profile-avatar">A</div><div><strong>Code Apps 用户</strong><span>Dataverse 当前身份</span></div></div>}
+      footer={<div className="profile-card"><div className="profile-avatar">A</div><div><strong>{activeWorkspaceRole.name}</strong><span>{workspaceId === 'inventory' ? '库存测试角色 · 可切换' : 'IT 测试角色 · 可切换'}</span></div></div>}
     />}
     header={<AppHeader breadcrumbs={<div className="breadcrumbs"><span>{currentWorkspaceLabel}</span><b>/</b><strong>{currentPageTitle}</strong></div>}
       actions={<div className="topbar-actions"><Avatar small name="A" /></div>} />}
@@ -1105,30 +1211,80 @@ export default function WorkOrderWorkspacePage() {
                   : inventoryView === 'alerts' ? '缺货、警戒线、批次临期/过期与库位超容预警。'
                     : inventoryView === 'replenish' ? '按警戒线生成补货建议量与采购估价。'
                       : inventoryView === 'batches' ? '批次追溯与临期优先出库管理。'
-                        : '库位实物盘点：录入实盘、复核差异并过账调整。')
+                        : inventoryView === 'roles' ? '管理库存工作台独立测试角色，验证库存按钮门控。'
+                          : '库位实物盘点：录入实盘、复核差异并过账调整。')
           : view === '概览' ? '查看工单规模、SLA 风险、工程师负载与处理趋势。'
             : view === '工单管理' ? '管理工单字段、跨记录操作和业务历史。'
               : view === '派发看板' ? '按实时工作负载和接单状态安排工程师任务。'
                 : view === '负责人申请' ? '集中查看负责人变更申请、审批状态和处理结果。'
-                  : '核对员工、部门与服务类别的当前 Dataverse 字段。'}
+                  : view === '角色权限' ? '管理 IT 服务工作台独立测试角色（与库存角色互不影响），并可跳转本台页面验证门控。'
+                    : '核对员工、部门与服务类别的当前 Dataverse 字段。'}
         actions={workspaceId === 'inventory' ? <div className="page-header-actions">
+          <span className="inventory-role-chip" title="当前库存测试角色">角色 · {activeInventoryRole.name}</span>
+          <button className="button button-quiet" type="button" onClick={() => setInventoryView('roles')}>角色权限</button>
           <button className="button button-quiet" type="button" onClick={() => setInventoryResetToken((value) => value + 1)}>重置样例数据</button>
-          <button className="button button-quiet" type="button" onClick={() => setInventoryScanToken((value) => value + 1)}>SKU 扫码</button>
+          <button
+            className="button button-quiet"
+            type="button"
+            disabled={!can('inventory.scan')}
+            title={!can('inventory.scan') ? '当前角色无扫码权限' : undefined}
+            onClick={() => setInventoryScanToken((value) => value + 1)}
+          >SKU 扫码</button>
           {inventoryView === 'stocktake'
-            ? <button className="button button-primary create-button" type="button" onClick={() => setInventoryStocktakeToken((value) => value + 1)}>发起盘点</button>
-            : <button className="button button-primary create-button" type="button" onClick={() => {
-              setInventoryView('ledger')
-              setInventoryCreateToken((value) => value + 1)
-            }}><span className="plus-mark">＋</span>新建物资</button>}
+            ? <button
+              className="button button-primary create-button"
+              type="button"
+              disabled={!can('inventory.stocktake')}
+              title={!can('inventory.stocktake') ? '当前角色无盘点权限' : undefined}
+              onClick={() => setInventoryStocktakeToken((value) => value + 1)}
+            >发起盘点</button>
+            : inventoryView !== 'roles' && <button
+              className="button button-primary create-button"
+              type="button"
+              disabled={!can('inventory.create')}
+              title={!can('inventory.create') ? '当前角色无新建权限' : undefined}
+              onClick={() => {
+                setInventoryView('ledger')
+                setInventoryCreateToken((value) => value + 1)
+              }}
+            ><span className="plus-mark">＋</span>新建物资</button>}
         </div> : workspaceId === 'it-service' ? <div className="page-header-actions">
-          <button className="button button-quiet seed-data-trigger" type="button" onClick={() => setSeedDialogOpen(true)} disabled={loading || busy}>添加 IT 演练数据</button>
-          <button className="button button-quiet" type="button" onClick={() => setRefreshToken((value) => value + 1)} disabled={loading || busy}>{loading ? '读取中…' : '重新读取'}</button>
-          {(view === '概览' || view === '工单管理') && <button className="button button-primary create-button" disabled={busy || activeDepartments.length === 0 || activeCategories.length === 0}
-            title={activeDepartments.length === 0 || activeCategories.length === 0 ? '需要有效的部门和服务类别记录' : undefined}
-            onClick={() => { setSelectedId(null); openDialog('create') }}><span className="plus-mark">＋</span>新建工单</button>}
+          <span className="inventory-role-chip" title="当前 IT 测试角色">角色 · {activeItRole.name}</span>
+          <button className="button button-quiet" type="button" onClick={() => setView('角色权限')}>角色权限</button>
+          {view !== '角色权限' && <>
+            <button
+              className="button button-quiet seed-data-trigger"
+              type="button"
+              onClick={() => {
+                if (!ensureIt('it.seed')) return
+                setSeedDialogOpen(true)
+              }}
+              disabled={loading || busy || !can('it.seed')}
+              title={!can('it.seed') ? '当前角色无写入演练数据权限' : undefined}
+            >添加 IT 演练数据</button>
+            <button className="button button-quiet" type="button" onClick={() => setRefreshToken((value) => value + 1)} disabled={loading || busy}>{loading ? '读取中…' : '重新读取'}</button>
+            {(view === '概览' || view === '工单管理') && <button
+              className="button button-primary create-button"
+              disabled={busy || !can('it.create') || activeDepartments.length === 0 || activeCategories.length === 0}
+              title={!can('it.create')
+                ? '当前角色无新建工单权限'
+                : activeDepartments.length === 0 || activeCategories.length === 0
+                  ? '需要有效的部门和服务类别记录'
+                  : undefined}
+              onClick={() => { setSelectedId(null); openDialog('create') }}
+            ><span className="plus-mark">＋</span>新建工单</button>}
+          </>}
         </div> : undefined}>
 
-        {workspaceId === 'inventory' && <InventoryWorkspacePanel
+        {workspaceId === 'inventory' && inventoryView === 'roles' && <RolePermissionPage
+          domain="inventory"
+          onNavigateInventory={openInventoryPermissionCheck}
+        />}
+        {workspaceId === 'it-service' && view === '角色权限' && <RolePermissionPage
+          domain="it-service"
+          onNavigateItService={openItPermissionCheck}
+        />}
+        {workspaceId === 'inventory' && inventoryView !== 'roles' && <InventoryWorkspacePanel
           view={inventoryView}
           createRequestToken={inventoryCreateToken}
           resetRequestToken={inventoryResetToken}
@@ -1179,7 +1335,13 @@ export default function WorkOrderWorkspacePage() {
               error={!loading && state.workOrders.length === 0 ? error : null} onRetry={() => setRefreshToken((value) => value + 1)}
               emptyTitle={state.workOrders.length === 0 ? '当前数据源没有工单' : '没有找到匹配的工单'}
               emptyDescription={state.workOrders.length === 0 ? '创建第一张工单或检查当前环境的数据记录。' : '更改筛选条件或搜索关键词。'}
-              emptyAction={<button className="button button-quiet" type="button" onClick={state.workOrders.length === 0 ? () => { setSelectedId(null); openDialog('create') } : clearFilters}>
+              emptyAction={<button
+                className="button button-quiet"
+                type="button"
+                disabled={state.workOrders.length === 0 && !can('it.create')}
+                title={state.workOrders.length === 0 && !can('it.create') ? '当前角色无新建工单权限' : undefined}
+                onClick={state.workOrders.length === 0 ? () => { setSelectedId(null); openDialog('create') } : clearFilters}
+              >
                 {state.workOrders.length === 0 ? '新建工单' : '清除筛选'}
               </button>}
               selectedRowKeys={selectedWorkOrderKeys} onSelectionChange={setSelectedWorkOrderKeys}
@@ -1191,18 +1353,46 @@ export default function WorkOrderWorkspacePage() {
             </footer>
           </section>
         </>}
-        {workspaceId === 'it-service' && view === '派发看板' && <WorkOrderDispatchBoard workOrders={state.workOrders} employees={state.employees ?? []}
-          onRequestAssignment={requestDragAssignment} onOpenWorkOrder={(workOrder) => setSelectedId(workOrder.id)} />}
+        {workspaceId === 'it-service' && view === '派发看板' && <WorkOrderDispatchBoard
+          workOrders={state.workOrders}
+          employees={state.employees ?? []}
+          canAssign={can('it.assign')}
+          onRequestAssignment={requestDragAssignment}
+          onOpenWorkOrder={(workOrder) => setSelectedId(workOrder.id)}
+        />}
         {workspaceId === 'it-service' && view === '负责人申请' && <AssignmentApprovalRequestsPage active refreshToken={refreshToken}
           onRefresh={() => setRefreshToken((value) => value + 1)}
           onOpenWorkOrder={(workOrderId) => { setSelectedId(workOrderId); setView('工单管理') }} />}
-        {workspaceId === 'it-service' && view === '资源目录' && <ResourceDirectory state={state} tab={resourceTab} query={resourceSearch} loading={loading}
-          onQueryChange={setResourceSearch} onEditResource={(resource) => { setDialogError(null); setResourceEditor(resource) }} />}
+        {workspaceId === 'it-service' && view === '资源目录' && <ResourceDirectory
+          state={state}
+          tab={resourceTab}
+          query={resourceSearch}
+          loading={loading}
+          canEdit={can('it.resources.edit')}
+          onQueryChange={setResourceSearch}
+          onEditResource={(resource) => {
+            if (!ensureIt('it.resources.edit')) return
+            setDialogError(null)
+            setResourceEditor(resource)
+          }}
+        />}
       </PageContainer>
 
-    {workspaceId === 'it-service' && selectedWorkOrder && <WorkOrderDetail key={`${selectedWorkOrder.id}-${refreshToken}`} workOrder={selectedWorkOrder} state={state} disabled={busy}
-      onClose={() => setSelectedId(null)} onEdit={() => openDialog('edit')} onAssign={() => openDialog('assign')}
-      onUnassign={() => openDialog('unassign')} onChangeStatus={() => openDialog('status')} />}
+    {workspaceId === 'it-service' && selectedWorkOrder && <WorkOrderDetail
+      key={`${selectedWorkOrder.id}-${refreshToken}`}
+      workOrder={selectedWorkOrder}
+      state={state}
+      disabled={busy}
+      canEdit={can('it.edit')}
+      canAssignAction={can('it.assign')}
+      canUnassignAction={can('it.unassign')}
+      canChangeStatus={can('it.status')}
+      onClose={() => setSelectedId(null)}
+      onEdit={() => openDialog('edit')}
+      onAssign={() => openDialog('assign')}
+      onUnassign={() => openDialog('unassign')}
+      onChangeStatus={() => openDialog('status')}
+    />}
 
     <WorkOrderFormDialog open={dialog === 'create' || dialog === 'edit'} workOrder={dialog === 'edit' ? selectedWorkOrder : null}
       departments={state.departments ?? []} categories={state.serviceCategories ?? []} busy={busy} error={dialogError}

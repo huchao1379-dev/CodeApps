@@ -81,7 +81,18 @@ import {
   type InventoryMovementType,
   type InventoryStockStatus,
 } from '../types/inventory.types'
+import { useAccessControl } from '../../access-control/context/AccessControlContext'
+import { APP_PERMISSION_LABELS, type AppPermission } from '../../access-control/types/access.types'
 import './InventoryWorkspacePanel.css'
+
+const STOCK_PERMISSION: Record<StockActionKind, AppPermission> = {
+  receive: 'inventory.receive',
+  issue: 'inventory.issue',
+  transfer: 'inventory.transfer',
+  adjust: 'inventory.adjust',
+  reserve: 'inventory.reserve',
+  release: 'inventory.reserve',
+}
 
 const PAGE_SIZE = 8
 const MOVEMENT_PAGE_SIZE = 10
@@ -95,6 +106,7 @@ export type InventoryView =
   | 'stocktake'
   | 'replenish'
   | 'batches'
+  | 'roles'
 
 function statusVariant(status: InventoryStockStatus) {
   if (status === 'out') return 'danger' as const
@@ -143,10 +155,24 @@ export function InventoryWorkspacePanel({
   stocktakeRequestToken = 0,
   onNavigate,
 }: InventoryWorkspacePanelProps) {
+  const { can } = useAccessControl()
   const [store, setStore] = useState<InventoryStoreState>(() => createInventoryStoreState())
   const [notice, setNotice] = useState<{ kind: 'success' | 'error' | 'info'; message: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [dialogError, setDialogError] = useState<string | null>(null)
+
+  const deny = (permission: AppPermission) => {
+    setNotice({
+      kind: 'error',
+      message: `当前角色无「${APP_PERMISSION_LABELS[permission]}」权限。请到「角色权限」切换角色后重试。`,
+    })
+  }
+
+  const ensure = (permission: AppPermission) => {
+    if (can(permission)) return true
+    deny(permission)
+    return false
+  }
 
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
@@ -179,6 +205,10 @@ export function InventoryWorkspacePanel({
 
   useEffect(() => {
     if (createRequestToken <= 0) return
+    if (!can('inventory.create')) {
+      deny('inventory.create')
+      return
+    }
     setEditingItem(null)
     setDialogError(null)
     setItemFormOpen(true)
@@ -186,12 +216,20 @@ export function InventoryWorkspacePanel({
 
   useEffect(() => {
     if (scanRequestToken <= 0) return
+    if (!can('inventory.scan')) {
+      deny('inventory.scan')
+      return
+    }
     setDialogError(null)
     setScanOpen(true)
   }, [scanRequestToken])
 
   useEffect(() => {
     if (stocktakeRequestToken <= 0) return
+    if (!can('inventory.stocktake')) {
+      deny('inventory.stocktake')
+      return
+    }
     setDialogError(null)
     setStocktakeDialogOpen(true)
   }, [stocktakeRequestToken])
@@ -375,21 +413,60 @@ export function InventoryWorkspacePanel({
   }
 
   const openCreate = () => {
+    if (!ensure('inventory.create')) return
     setEditingItem(null)
     setDialogError(null)
     setItemFormOpen(true)
   }
 
   const openEdit = (item: InventoryItem) => {
+    if (!ensure('inventory.edit')) return
     setEditingItem(item)
     setDialogError(null)
     setItemFormOpen(true)
   }
 
   const openStockAction = (item: InventoryItem, kind: StockActionKind) => {
+    if (!ensure(STOCK_PERMISSION[kind])) return
     setStockItemId(item.id)
     setStockKind(kind)
     setDialogError(null)
+  }
+
+  const openScan = () => {
+    if (!ensure('inventory.scan')) return
+    setDialogError(null)
+    setScanOpen(true)
+  }
+
+  const openStocktake = () => {
+    if (!ensure('inventory.stocktake')) return
+    setDialogError(null)
+    setStocktakeDialogOpen(true)
+  }
+
+  const openQuickPick = (kind: StockActionKind) => {
+    if (!ensure(STOCK_PERMISSION[kind])) return
+    setQuickPickKind(kind)
+  }
+
+  const openBulkTransfer = () => {
+    if (!ensure('inventory.transfer')) return
+    setDialogError(null)
+    setBulkTransferOpen(true)
+  }
+
+  const openPurchaseOrder = (itemIds: string[]) => {
+    if (!ensure('inventory.purchase.create')) return
+    setPurchaseOrderItemIds(itemIds)
+    setDialogError(null)
+    setPurchaseOrderDialogOpen(true)
+  }
+
+  const openStocktakePost = (sessionId: string) => {
+    if (!ensure('inventory.stocktake.post')) return
+    setDialogError(null)
+    setStocktakePostSessionId(sessionId)
   }
 
   const handleItemSubmit = (input: InventoryItemInput) => {
@@ -583,10 +660,10 @@ export function InventoryWorkspacePanel({
     {
       key: 'actions', title: '操作', width: 220,
       render: (_, item) => <div className="inventory-row-actions" onClick={(event) => event.stopPropagation()}>
-        <button className="button button-quiet inventory-mini-button" type="button" onClick={() => openStockAction(item, 'receive')}>入库</button>
-        <button className="button button-quiet inventory-mini-button" type="button" onClick={() => openStockAction(item, 'issue')}>领用</button>
-        <button className="button button-quiet inventory-mini-button" type="button" onClick={() => openStockAction(item, 'transfer')}>调拨</button>
-        <button className="button button-quiet inventory-mini-button" type="button" onClick={() => openEdit(item)}>编辑</button>
+        <button className="button button-quiet inventory-mini-button" type="button" disabled={!can('inventory.receive')} title={!can('inventory.receive') ? '无入库权限' : undefined} onClick={() => openStockAction(item, 'receive')}>入库</button>
+        <button className="button button-quiet inventory-mini-button" type="button" disabled={!can('inventory.issue')} title={!can('inventory.issue') ? '无领用权限' : undefined} onClick={() => openStockAction(item, 'issue')}>领用</button>
+        <button className="button button-quiet inventory-mini-button" type="button" disabled={!can('inventory.transfer')} title={!can('inventory.transfer') ? '无调拨权限' : undefined} onClick={() => openStockAction(item, 'transfer')}>调拨</button>
+        <button className="button button-quiet inventory-mini-button" type="button" disabled={!can('inventory.edit')} title={!can('inventory.edit') ? '无编辑权限' : undefined} onClick={() => openEdit(item)}>编辑</button>
       </div>,
     },
   ]
@@ -823,10 +900,10 @@ export function InventoryWorkspacePanel({
           <p>实盘录入、差异计算并过账调整账面 — 工单平台无此流程。</p>
           <span>{summary.stocktakes} 个进行中 · 点击进入</span>
         </button>
-        <button type="button" className="inventory-shortcut-card" onClick={() => { setDialogError(null); setScanOpen(true) }}>
+        <button type="button" className="inventory-shortcut-card" disabled={!can('inventory.scan')} onClick={openScan}>
           <strong>SKU 扫码</strong>
           <p>模拟扫枪识别 SKU，快速领用/入库/调拨，面向实物作业。</p>
-          <span>点击打开扫码</span>
+          <span>{can('inventory.scan') ? '点击打开扫码' : '当前角色无扫码权限'}</span>
         </button>
       </div>
 
@@ -876,9 +953,9 @@ export function InventoryWorkspacePanel({
               <p>入库（主轴）与领用/负向调整（次轴） · 点击图表跳转流水</p>
             </div>
             <div className="inventory-toolbar-actions">
-              <button className="button button-quiet" type="button" onClick={() => { setDialogError(null); setScanOpen(true) }}>扫码作业</button>
+              <button className="button button-quiet" type="button" disabled={!can('inventory.scan')} onClick={openScan}>扫码作业</button>
               <button className="button button-quiet" type="button" onClick={() => go('movements')}>查看流水</button>
-              <button className="button button-quiet" type="button" onClick={openCreate}>新建物资</button>
+              <button className="button button-quiet" type="button" disabled={!can('inventory.create')} onClick={openCreate}>新建物资</button>
             </div>
           </header>
           <div className="inventory-chart-body">
@@ -916,8 +993,8 @@ export function InventoryWorkspacePanel({
                   <small>{item.sku} · {item.location}</small>
                 </button>
                 <div className="inventory-row-actions">
-                  <button className="button button-quiet inventory-mini-button" type="button" onClick={() => openStockAction(item, 'receive')}>入库</button>
-                  <button className="button button-quiet inventory-mini-button" type="button" onClick={() => openStockAction(item, 'adjust')}>调整</button>
+                  <button className="button button-quiet inventory-mini-button" type="button" disabled={!can('inventory.receive')} onClick={() => openStockAction(item, 'receive')}>入库</button>
+                  <button className="button button-quiet inventory-mini-button" type="button" disabled={!can('inventory.adjust')} onClick={() => openStockAction(item, 'adjust')}>调整</button>
                 </div>
               </article>
             ))}
@@ -985,8 +1062,8 @@ export function InventoryWorkspacePanel({
             />
             <div className="inventory-toolbar-actions">
               <button className="button button-quiet" type="button" onClick={exportMovementsCsv}>导出 CSV</button>
-              <button className="button button-quiet" type="button" onClick={() => setQuickPickKind('receive')}>快捷入库</button>
-              <button className="button button-primary" type="button" onClick={() => setQuickPickKind('issue')}>快捷领用</button>
+              <button className="button button-quiet" type="button" disabled={!can('inventory.receive')} onClick={() => openQuickPick('receive')}>快捷入库</button>
+              <button className="button button-primary" type="button" disabled={!can('inventory.issue')} onClick={() => openQuickPick('issue')}>快捷领用</button>
             </div>
           </div>
         </header>
@@ -1023,9 +1100,9 @@ export function InventoryWorkspacePanel({
         onClose={() => setSelectedMovementId(null)}
         footer={selectedMovement ? <div className="inventory-detail-actions">
           {selectedMovementItem && <>
-            <button className="button button-quiet" type="button" onClick={() => openStockAction(selectedMovementItem, 'receive')}>再次入库</button>
-            <button className="button button-quiet" type="button" onClick={() => openStockAction(selectedMovementItem, 'issue')}>再次领用</button>
-            <button className="button button-primary" type="button" onClick={() => {
+            <button className="button button-quiet" type="button" disabled={!can('inventory.receive')} onClick={() => openStockAction(selectedMovementItem, 'receive')}>再次入库</button>
+            <button className="button button-quiet" type="button" disabled={!can('inventory.issue')} onClick={() => openStockAction(selectedMovementItem, 'issue')}>再次领用</button>
+            <button className="button button-primary" type="button" disabled={!can('inventory.edit')} onClick={() => {
               if (selectedMovementItem) openEdit(selectedMovementItem)
             }}>编辑物资</button>
           </>}
@@ -1087,6 +1164,8 @@ export function InventoryWorkspacePanel({
       <InventoryAlertsView
         alerts={inventoryAlerts}
         items={store.items}
+        canReplenish={can('inventory.receive')}
+        canEdit={can('inventory.edit')}
         onReplenish={(item) => openStockAction(item, 'receive')}
         onOpenItem={(item) => { setSelectedId(item.id); openEdit(item) }}
       />
@@ -1100,8 +1179,14 @@ export function InventoryWorkspacePanel({
         suggestions={replenishmentSuggestions}
         items={store.items}
         purchaseOrders={store.purchaseOrders}
+        canReceive={can('inventory.receive')}
+        canEdit={can('inventory.edit')}
+        canCreatePurchase={can('inventory.purchase.create')}
+        canReceivePurchase={can('inventory.purchase.receive')}
+        canCancelPurchase={can('inventory.purchase.cancel')}
         onReceive={(item) => openStockAction(item, 'receive')}
         onReceiveSuggested={(item, quantity) => {
+          if (!ensure('inventory.receive')) return
           applyStoreChange(
             (current) => receiveInventory(current, {
               itemId: item.id,
@@ -1113,18 +1198,16 @@ export function InventoryWorkspacePanel({
           )
         }}
         onOpenItem={(item) => openEdit(item)}
-        onCreatePurchaseOrder={(itemIds) => {
-          setPurchaseOrderItemIds(itemIds)
-          setDialogError(null)
-          setPurchaseOrderDialogOpen(true)
-        }}
+        onCreatePurchaseOrder={openPurchaseOrder}
         onReceivePurchaseOrder={(orderId) => {
+          if (!ensure('inventory.purchase.receive')) return
           applyStoreChange(
             (current) => receivePurchaseOrder(current, orderId, '库存管理员'),
             '采购单已收货并写入入库流水',
           )
         }}
         onCancelPurchaseOrder={(orderId) => {
+          if (!ensure('inventory.purchase.cancel')) return
           applyStoreChange((current) => cancelPurchaseOrder(current, orderId), '采购单已取消')
         }}
       />
@@ -1138,6 +1221,9 @@ export function InventoryWorkspacePanel({
         batches={store.batches}
         items={store.items}
         locations={store.locations.map((location) => location.name)}
+        canIssue={can('inventory.issue')}
+        canReceive={can('inventory.receive')}
+        canEdit={can('inventory.edit')}
         onIssuePrefer={(batch) => {
           const item = store.items.find((entry) => entry.id === batch.itemId)
           if (!item) {
@@ -1168,8 +1254,11 @@ export function InventoryWorkspacePanel({
       <InventoryStocktakeView
         sessions={store.stocktakes}
         busy={busy}
-        onStart={() => { setDialogError(null); setStocktakeDialogOpen(true) }}
+        canStocktake={can('inventory.stocktake')}
+        canPost={can('inventory.stocktake.post')}
+        onStart={openStocktake}
         onCountChange={(sessionId, itemId, countedQuantity) => {
+          if (!ensure('inventory.stocktake')) return
           try {
             setStore((current) => updateStocktakeCount(current, sessionId, itemId, countedQuantity))
           } catch (error) {
@@ -1177,12 +1266,10 @@ export function InventoryWorkspacePanel({
           }
         }}
         onSubmitReview={(sessionId) => {
+          if (!ensure('inventory.stocktake')) return
           applyStoreChange((current) => markStocktakeReview(current, sessionId), '盘点已提交复核')
         }}
-        onRequestPost={(sessionId) => {
-          setDialogError(null)
-          setStocktakePostSessionId(sessionId)
-        }}
+        onRequestPost={openStocktakePost}
       />
     </>
   }
@@ -1235,6 +1322,7 @@ export function InventoryWorkspacePanel({
                 <button
                   className="button button-quiet inventory-mini-button"
                   type="button"
+                  disabled={!can('inventory.transfer')}
                   onClick={() => {
                     const item = store.items.find((entry) => entry.location === row.name)
                     if (item) openStockAction(item, 'transfer')
@@ -1244,6 +1332,7 @@ export function InventoryWorkspacePanel({
                 <button
                   className="button button-quiet inventory-mini-button"
                   type="button"
+                  disabled={!can('inventory.receive')}
                   onClick={() => {
                     const item = store.items.find((entry) => entry.location === row.name && (entry.status === 'low' || entry.status === 'out'))
                       ?? store.items.find((entry) => entry.location === row.name)
@@ -1290,7 +1379,7 @@ export function InventoryWorkspacePanel({
             resetLabel="清除"
           />
           <div className="inventory-toolbar-actions">
-            <button className="button button-primary" type="button" onClick={openCreate}>新建物资</button>
+            <button className="button button-primary" type="button" disabled={!can('inventory.create')} onClick={openCreate}>新建物资</button>
           </div>
         </div>
       </header>
@@ -1299,13 +1388,12 @@ export function InventoryWorkspacePanel({
         <BulkActionBar
           selectedCount={selectedKeys.length}
           actions={[
-            { id: 'bulk-transfer', label: '批量调拨' },
-            { id: 'bulk-reserve', label: '批量预留', disabled: selectedKeys.length !== 1 },
+            { id: 'bulk-transfer', label: '批量调拨', disabled: !can('inventory.transfer') },
+            { id: 'bulk-reserve', label: '批量预留', disabled: selectedKeys.length !== 1 || !can('inventory.reserve') },
           ]}
           onAction={(actionId) => {
             if (actionId === 'bulk-transfer') {
-              setDialogError(null)
-              setBulkTransferOpen(true)
+              openBulkTransfer()
               return
             }
             if (actionId === 'bulk-reserve' && selectedKeys[0]) {
@@ -1325,7 +1413,7 @@ export function InventoryWorkspacePanel({
         ariaLabel="库存列表"
         emptyTitle="没有匹配的库存记录"
         emptyDescription="调整筛选条件，或新建物资写入台账。"
-        emptyAction={<button className="button button-primary" type="button" onClick={openCreate}>新建物资</button>}
+        emptyAction={<button className="button button-primary" type="button" disabled={!can('inventory.create')} onClick={openCreate}>新建物资</button>}
         onRowClick={(item) => setSelectedId(item.id)}
         selectedRowKeys={selectedKeys}
         onSelectionChange={setSelectedKeys}
@@ -1351,13 +1439,13 @@ export function InventoryWorkspacePanel({
       size="medium"
       onClose={() => setSelectedId(null)}
       footer={selected ? <div className="inventory-detail-actions">
-        <button className="button button-quiet" type="button" onClick={() => openStockAction(selected, 'receive')}>入库</button>
-        <button className="button button-quiet" type="button" onClick={() => openStockAction(selected, 'issue')}>领用</button>
-        <button className="button button-quiet" type="button" onClick={() => openStockAction(selected, 'adjust')}>调整</button>
-        <button className="button button-quiet" type="button" onClick={() => openStockAction(selected, 'transfer')}>调拨</button>
-        <button className="button button-quiet" type="button" onClick={() => openStockAction(selected, 'reserve')}>预留</button>
-        <button className="button button-quiet" type="button" onClick={() => openStockAction(selected, 'release')}>释放</button>
-        <button className="button button-primary" type="button" onClick={() => openEdit(selected)}>编辑</button>
+        <button className="button button-quiet" type="button" disabled={!can('inventory.receive')} onClick={() => openStockAction(selected, 'receive')}>入库</button>
+        <button className="button button-quiet" type="button" disabled={!can('inventory.issue')} onClick={() => openStockAction(selected, 'issue')}>领用</button>
+        <button className="button button-quiet" type="button" disabled={!can('inventory.adjust')} onClick={() => openStockAction(selected, 'adjust')}>调整</button>
+        <button className="button button-quiet" type="button" disabled={!can('inventory.transfer')} onClick={() => openStockAction(selected, 'transfer')}>调拨</button>
+        <button className="button button-quiet" type="button" disabled={!can('inventory.reserve')} onClick={() => openStockAction(selected, 'reserve')}>预留</button>
+        <button className="button button-quiet" type="button" disabled={!can('inventory.reserve')} onClick={() => openStockAction(selected, 'release')}>释放</button>
+        <button className="button button-primary" type="button" disabled={!can('inventory.edit')} onClick={() => openEdit(selected)}>编辑</button>
       </div> : undefined}
     >
       {selected && <>

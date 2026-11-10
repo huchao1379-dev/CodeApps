@@ -47,12 +47,16 @@ function PurchaseOrderListDialog({
   onClose,
   onReceivePurchaseOrder,
   onCancelPurchaseOrder,
+  canReceivePurchase = true,
+  canCancelPurchase = true,
 }: {
   open: boolean
   purchaseOrders: PurchaseOrder[]
   onClose: () => void
   onReceivePurchaseOrder: (orderId: string) => void
   onCancelPurchaseOrder: (orderId: string) => void
+  canReceivePurchase?: boolean
+  canCancelPurchase?: boolean
 }) {
   const dialogRef = useOverlayFocus<HTMLElement>(open, onClose)
   const [orderPage, setOrderPage] = useState(1)
@@ -130,10 +134,10 @@ function PurchaseOrderListDialog({
       render: (_, order) => (
         <div className="inventory-row-actions" onClick={(event) => event.stopPropagation()}>
           {order.status !== 'received' && order.status !== 'cancelled' && <>
-            <button className="button button-primary inventory-mini-button" type="button" onClick={() => onReceivePurchaseOrder(order.id)}>
+            <button className="button button-primary inventory-mini-button" type="button" disabled={!canReceivePurchase} onClick={() => onReceivePurchaseOrder(order.id)}>
               收货入库
             </button>
-            <button className="button button-quiet inventory-mini-button" type="button" onClick={() => onCancelPurchaseOrder(order.id)}>
+            <button className="button button-quiet inventory-mini-button" type="button" disabled={!canCancelPurchase} onClick={() => onCancelPurchaseOrder(order.id)}>
               取消
             </button>
           </>}
@@ -205,6 +209,11 @@ export function InventoryReplenishView({
   suggestions,
   items,
   purchaseOrders,
+  canReceive = true,
+  canEdit = true,
+  canCreatePurchase = true,
+  canReceivePurchase = true,
+  canCancelPurchase = true,
   onReceive,
   onReceiveSuggested,
   onOpenItem,
@@ -215,6 +224,11 @@ export function InventoryReplenishView({
   suggestions: ReplenishmentSuggestion[]
   items: InventoryItem[]
   purchaseOrders: PurchaseOrder[]
+  canReceive?: boolean
+  canEdit?: boolean
+  canCreatePurchase?: boolean
+  canReceivePurchase?: boolean
+  canCancelPurchase?: boolean
   onReceive: (item: InventoryItem) => void
   onReceiveSuggested: (item: InventoryItem, quantity: number) => void
   onOpenItem: (item: InventoryItem) => void
@@ -322,10 +336,11 @@ export function InventoryReplenishView({
             <button
               className="button button-primary inventory-mini-button"
               type="button"
+              disabled={!canReceive}
               onClick={() => onReceiveSuggested(item, row.suggestedQty)}
             >按建议入库</button>
-            <button className="button button-quiet inventory-mini-button" type="button" onClick={() => onReceive(item)}>自定义入库</button>
-            <button className="button button-quiet inventory-mini-button" type="button" onClick={() => onOpenItem(item)}>编辑</button>
+            <button className="button button-quiet inventory-mini-button" type="button" disabled={!canReceive} onClick={() => onReceive(item)}>自定义入库</button>
+            <button className="button button-quiet inventory-mini-button" type="button" disabled={!canEdit} onClick={() => onOpenItem(item)}>编辑</button>
           </div>
         )
       },
@@ -357,7 +372,8 @@ export function InventoryReplenishView({
             <button
               className="button button-primary"
               type="button"
-              disabled={selectedIds.length === 0}
+              disabled={selectedIds.length === 0 || !canCreatePurchase}
+              title={!canCreatePurchase ? '当前角色无生成采购单权限' : undefined}
               onClick={() => onCreatePurchaseOrder(selectedIds)}
             >
               生成采购单{selectedIds.length > 0 ? `（${selectedIds.length}）` : ''}
@@ -409,6 +425,8 @@ export function InventoryReplenishView({
       onClose={() => setPurchaseOrdersOpen(false)}
       onReceivePurchaseOrder={onReceivePurchaseOrder}
       onCancelPurchaseOrder={onCancelPurchaseOrder}
+      canReceivePurchase={canReceivePurchase}
+      canCancelPurchase={canCancelPurchase}
     />
   </section>
 }

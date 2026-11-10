@@ -8,11 +8,18 @@ const PRIORITY_CLASS = { [PRIORITY.low]: 'low', [PRIORITY.medium]: 'medium', [PR
 export interface WorkOrderDispatchBoardProps {
   workOrders: WorkOrder[]
   employees: EmployeeOption[]
+  canAssign?: boolean
   onRequestAssignment: (workOrder: WorkOrder, employee: EmployeeOption) => void
   onOpenWorkOrder: (workOrder: WorkOrder) => void
 }
 
-export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignment, onOpenWorkOrder }: WorkOrderDispatchBoardProps) {
+export function WorkOrderDispatchBoard({
+  workOrders,
+  employees,
+  canAssign = true,
+  onRequestAssignment,
+  onOpenWorkOrder,
+}: WorkOrderDispatchBoardProps) {
   const backlog = workOrders.filter((workOrder) => workOrder.status === WORK_ORDER_STATUS.new && !workOrder.assignedToId)
   const activeEmployees = useMemo(() => employees.filter((employee) => employee.isActive), [employees])
   const [selectedBacklogId, setSelectedBacklogId] = useState<string | null>(null)
@@ -61,13 +68,13 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
 
   const dropWorkOrder = (event: DragEvent<HTMLElement>, employee: EmployeeOption) => {
     event.preventDefault()
-    if (!isAssignable(employee)) return
+    if (!canAssign || !isAssignable(employee)) return
     const workOrder = backlog.find((item) => item.id === event.dataTransfer.getData('text/work-order-id'))
     if (workOrder) onRequestAssignment(workOrder, employee)
   }
 
   const assignSelectedTo = (employee: EmployeeOption) => {
-    if (!selectedBacklog || !isAssignable(employee)) return
+    if (!canAssign || !selectedBacklog || !isAssignable(employee)) return
     onRequestAssignment(selectedBacklog, employee)
   }
 
@@ -166,9 +173,9 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
           const overloaded = isOverloaded(employee)
           const unavailable = !employee.isAvailableForOrder
           const assignable = isAssignable(employee)
-          const canClickAssign = Boolean(selectedBacklog) && assignable
+          const canClickAssign = canAssign && Boolean(selectedBacklog) && assignable
           return <section className={`engineer-lane${overloaded ? ' lane-overloaded' : ''}${unavailable ? ' lane-unavailable' : ''}${canClickAssign ? ' lane-assignable' : ''}`} key={employee.id}
-            onDragOver={(event) => { if (assignable) event.preventDefault() }} onDrop={(event) => dropWorkOrder(event, employee)}>
+            onDragOver={(event) => { if (canAssign && assignable) event.preventDefault() }} onDrop={(event) => dropWorkOrder(event, employee)}>
             <header className="engineer-lane-header"><span className="engineer-avatar">{employee.employeeName.slice(-1)}</span>
               <span className="engineer-identity"><strong>{employee.employeeName}</strong><small>{employee.department ?? '未设置部门'}</small></span>
               <StatusBadge status={unavailable ? 'unavailable' : overloaded ? 'overdue' : 'available'}
@@ -178,14 +185,23 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
             <div className="workload-track"><span style={{ width: capacity ? `${Math.min(100, workload / capacity * 100)}%` : workload > 0 ? '25%' : '0%' }} /></div>
             {overloaded && <p className="capacity-conflict">已达到工作负载上限</p>}
             {unavailable && <p className="capacity-conflict">此员工当前不能接收新工单</p>}
+            {!canAssign && <p className="capacity-conflict">当前角色无派发权限</p>}
             <div className="engineer-lane-actions">
               <button className="button button-quiet dispatch-assign-button" type="button" disabled={!canClickAssign}
-                title={!selectedBacklog ? '先在左侧选中一张待分派工单' : unavailable ? '该员工暂不可接单' : overloaded ? '已达负载上限' : `分配给 ${employee.employeeName}`}
+                title={!canAssign
+                  ? '当前角色无派发权限'
+                  : !selectedBacklog
+                    ? '先在左侧选中一张待分派工单'
+                    : unavailable
+                      ? '该员工暂不可接单'
+                      : overloaded
+                        ? '已达负载上限'
+                        : `分配给 ${employee.employeeName}`}
                 onClick={() => assignSelectedTo(employee)}>
                 {selectedBacklog ? `分配给 ${employee.employeeName}` : '先选中工单'}
               </button>
             </div>
-            <div className={`engineer-lane-dropzone${assignable ? '' : ' is-readonly'}`} aria-label={`${employee.employeeName}的已分配工单`}>
+            <div className={`engineer-lane-dropzone${canAssign && assignable ? '' : ' is-readonly'}`} aria-label={`${employee.employeeName}的已分配工单`}>
               {assignedOrders.length > 0 ? <div className="engineer-task-rail" role="list" aria-label={`${employee.employeeName}已分配工单，可左右滑动`}>
                 {assignedOrders.map((workOrder) => <button key={workOrder.id} className="engineer-task" type="button" role="listitem" onClick={() => onOpenWorkOrder(workOrder)}>
                   <strong>{workOrder.workOrderName}</strong>
@@ -193,7 +209,7 @@ export function WorkOrderDispatchBoard({ workOrders, employees, onRequestAssignm
                   <em>{STATUS_LABELS[workOrder.status]}</em>
                 </button>)}
               </div> : <span className="dropzone-hint">
-                {assignable
+                {canAssign && assignable
                   ? (selectedBacklog ? '可点击上方分配，或拖放到此处' : '暂无活动工单 · 拖放待分派工单到此处')
                   : '暂无活动工单'}
               </span>}

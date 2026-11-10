@@ -30,6 +30,8 @@ function AlertTable({
   onReplenish,
   onOpenItem,
   showReplenish,
+  canReplenish = true,
+  canEdit = true,
 }: {
   title: string
   description: string
@@ -41,6 +43,8 @@ function AlertTable({
   onReplenish: (item: InventoryItem) => void
   onOpenItem: (item: InventoryItem) => void
   showReplenish: boolean
+  canReplenish?: boolean
+  canEdit?: boolean
 }) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(8)
@@ -114,11 +118,23 @@ function AlertTable({
         return (
           <div className="inventory-row-actions" onClick={(event) => event.stopPropagation()}>
             {showReplenish && (alert.kind === 'out' || alert.kind === 'low') && (
-              <button className="button button-primary inventory-mini-button" type="button" onClick={() => onReplenish(item)}>
+              <button
+                className="button button-primary inventory-mini-button"
+                type="button"
+                disabled={!canReplenish}
+                title={!canReplenish ? '当前角色无入库权限' : undefined}
+                onClick={() => onReplenish(item)}
+              >
                 补货
               </button>
             )}
-            <button className="button button-quiet inventory-mini-button" type="button" onClick={() => onOpenItem(item)}>
+            <button
+              className="button button-quiet inventory-mini-button"
+              type="button"
+              disabled={!canEdit}
+              title={!canEdit ? '当前角色无编辑权限' : undefined}
+              onClick={() => onOpenItem(item)}
+            >
               查看
             </button>
           </div>
@@ -168,11 +184,15 @@ function AlertTable({
 export function InventoryAlertsView({
   alerts,
   items,
+  canReplenish = true,
+  canEdit = true,
   onReplenish,
   onOpenItem,
 }: {
   alerts: InventoryAlert[]
   items: InventoryItem[]
+  canReplenish?: boolean
+  canEdit?: boolean
   onReplenish: (item: InventoryItem) => void
   onOpenItem: (item: InventoryItem) => void
 }) {
@@ -198,6 +218,8 @@ export function InventoryAlertsView({
         onReplenish={onReplenish}
         onOpenItem={onOpenItem}
         showReplenish={false}
+        canReplenish={canReplenish}
+        canEdit={canEdit}
       />
       <AlertTable
         title="低于警戒线"
@@ -210,6 +232,8 @@ export function InventoryAlertsView({
         onReplenish={onReplenish}
         onOpenItem={onOpenItem}
         showReplenish
+        canReplenish={canReplenish}
+        canEdit={canEdit}
       />
     </div>
   )

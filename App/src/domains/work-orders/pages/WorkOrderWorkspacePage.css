@@ -61,6 +61,19 @@
 .button { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 9px; padding: 0 14px; border: 1px solid transparent; border-radius: 7px; font-size: var(--font-size-sm); font-weight: 600; transition: transform .16s, background .16s, box-shadow .16s; margin-left: 8px; }
 .page-header-actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--spacing-sm); }
 .page-header-actions .button { margin-left: 0; }
+.inventory-role-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #5b9bd5 35%, var(--color-border));
+  background: color-mix(in srgb, #5b9bd5 10%, var(--color-surface));
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
 .page-header-actions .seed-data-trigger { order: -1; color: var(--color-text-muted); border-color: var(--color-border); background: transparent; }
 .page-header-actions .seed-data-trigger:hover { color: var(--color-text-secondary); background: var(--color-surface-muted); }
 .button:active { transform: translateY(1px); }
