@@ -83,6 +83,7 @@ import {
 } from '../types/inventory.types'
 import { useAccessControl } from '../../access-control/context/AccessControlContext'
 import { APP_PERMISSION_LABELS, type AppPermission } from '../../access-control/types/access.types'
+import { csvDateStamp, downloadCsv } from '../../../shared/utils/csvExport'
 import './InventoryWorkspacePanel.css'
 
 const STOCK_PERMISSION: Record<StockActionKind, AppPermission> = {
@@ -547,30 +548,23 @@ export function InventoryWorkspacePanel({
   }
 
   const exportMovementsCsv = () => {
-    const header = ['流水号', '类型', 'SKU', '物资', '数量', '源库位', '目标库位', '操作人', '原因', '关联工单', '发生时间']
-    const rows = filteredMovements.map((movement) => [
-      movement.number,
-      INVENTORY_MOVEMENT_LABELS[movement.type],
-      movement.sku,
-      movement.itemName,
-      String(movement.quantity),
-      movement.fromLocation ?? '',
-      movement.toLocation ?? '',
-      movement.operator,
-      movement.reason,
-      movement.relatedWorkOrder ?? '',
-      formatDate(movement.occurredAt),
-    ])
-    const csv = [header, ...rows]
-      .map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(','))
-      .join('\n')
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `inventory-movements-${new Date().toISOString().slice(0, 10)}.csv`
-    anchor.click()
-    URL.revokeObjectURL(url)
+    downloadCsv({
+      filename: `inventory-movements-${csvDateStamp()}.csv`,
+      headers: ['流水号', '类型', 'SKU', '物资', '数量', '源库位', '目标库位', '操作人', '原因', '关联工单', '发生时间'],
+      rows: filteredMovements.map((movement) => [
+        movement.number,
+        INVENTORY_MOVEMENT_LABELS[movement.type],
+        movement.sku,
+        movement.itemName,
+        movement.quantity,
+        movement.fromLocation ?? '',
+        movement.toLocation ?? '',
+        movement.operator,
+        movement.reason,
+        movement.relatedWorkOrder ?? '',
+        formatDate(movement.occurredAt),
+      ]),
+    })
     setNotice({ kind: 'success', message: `已导出 ${filteredMovements.length} 条流水。` })
   }
 

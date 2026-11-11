@@ -71,3 +71,8 @@ export const NavIconAccess = () => <Icon>
   <path d="M4.5 16.2c.9-2.8 3-4.2 5.5-4.2s4.6 1.4 5.5 4.2" {...stroke} />
   <path d="M14.2 4.8 16 6.6 14.2 8.4" {...stroke} />
 </Icon>
+
+export const NavIconCalendar = () => <Icon>
+  <rect x="3.5" y="4.5" width="13" height="12" rx="2" {...stroke} />
+  <path d="M3.5 8h13M7 3.5v3M13 3.5v3M7.5 11.5h2M10.5 11.5h2M7.5 14h2" {...stroke} />
+</Icon>

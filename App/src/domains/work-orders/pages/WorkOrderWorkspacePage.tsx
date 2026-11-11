@@ -44,6 +44,7 @@ import {
   NavIconAlerts,
   NavIconApprovals,
   NavIconBatches,
+  NavIconCalendar,
   NavIconDispatch,
   NavIconInventory,
   NavIconOverview,
@@ -59,10 +60,12 @@ import { WorkspaceSwitcher, type WorkspaceId } from '../../../workbench/workspac
 import { WorkOrderDispatchBoard } from '../components/WorkOrderDispatchBoard'
 import { WorkOrderOperationsDashboard } from '../components/WorkOrderOperationsDashboard'
 import { AssignmentApprovalRequestsPage } from '../components/AssignmentApprovalRequestsPage'
+import { OrgCalendarPage } from './OrgCalendarPage'
 import { WorkOrderBatchActionDialog, type WorkOrderBatchAction, type WorkOrderBatchActionInput } from '../components/WorkOrderBatchActionDialog'
 import { InventoryWorkspacePanel, type InventoryView } from '../../inventory/pages/InventoryWorkspacePanel'
 import { ACTIVE_STATUSES, BATCH_CONCURRENCY, emptyWorkOrderState, WORK_ORDER_PAGE_SIZE } from '../config/workOrderWorkspace'
 import type { BulkResultItem, ItServiceView, ResourceTab, WorkOrderDialogMode } from '../types/workspace.types'
+import { exportWorkOrdersFromState } from '../utils/exportWorkOrdersCsv'
 import { getDatePeriodBounds, localDateValue } from '../utils/formatDate'
 import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { Avatar } from '../components/WorkOrderBadges'
@@ -109,7 +112,7 @@ export default function WorkOrderWorkspacePage() {
   const [dialog, setDialog] = useState<WorkOrderDialogMode>(null)
   const [dialogError, setDialogError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'success' | 'error' | 'warning' | 'info'; message: string } | null>(null)
   const denyIt = (permission: AppPermission) => {
     setNotice({
       kind: 'error',
@@ -203,6 +206,7 @@ export default function WorkOrderWorkspacePage() {
   const assignmentCandidates = useMemo(() => pendingAssignment ? [pendingAssignment.workOrder] : selectedWorkOrders, [pendingAssignment, selectedWorkOrders])
   const batchEligibleEmployees = (state.employees ?? []).filter((employee) => employee.isActive && employee.isAvailableForOrder)
   const batchActions: BulkAction[] = [
+    { id: 'export', label: '导出选中', icon: '↓', disabled: !can('it.view') },
     { id: 'assign', label: '批量调整负责人', icon: '↗', disabled: !can('it.bulk') || !can('it.assign') },
     { id: 'priority', label: '修改优先级', icon: '↑', disabled: !can('it.bulk') || !can('it.edit') },
     { id: 'status', label: '修改状态', icon: '◷', disabled: !can('it.bulk') || !can('it.status') },
@@ -474,7 +478,24 @@ export default function WorkOrderWorkspacePage() {
   const currentPageTitle = workspaceId === 'inventory' ? inventoryViewLabel[inventoryView] : view
   const currentWorkspaceLabel = workspaceId === 'inventory' ? '库存管理工作台' : 'IT 服务运营'
 
+  const exportWorkOrders = (targets: WorkOrder[]) => {
+    if (!ensureIt('it.view')) return
+    if (targets.length === 0) {
+      setNotice({ kind: 'warning', message: '当前没有可导出的工单。' })
+      return
+    }
+    const result = exportWorkOrdersFromState(targets, state)
+    setNotice({
+      kind: 'success',
+      message: `已导出 ${result.workOrderCount} 张工单（含负责人变动 ${result.assignmentCount} 条、历史 ${result.historyCount} 条）。`,
+    })
+  }
+
   const requestBatchAction = (actionId: string) => {
+    if (actionId === 'export') {
+      exportWorkOrders(selectedWorkOrders)
+      return
+    }
     if (actionId === 'assign' || actionId === 'priority' || actionId === 'status' || actionId === 'cancel') {
       if (!ensureIt('it.bulk')) return
       if (actionId === 'assign' && !ensureIt('it.assign')) return
@@ -722,6 +743,7 @@ export default function WorkOrderWorkspacePage() {
     { id: 'overview', path: 'overview', label: '概览', icon: <NavIconOverview /> },
     { id: 'work-orders', path: 'work-orders', label: '工单管理', icon: <NavIconWorkOrders />, badge: stats.total },
     { id: 'dispatch', path: 'dispatch', label: '派发看板', icon: <NavIconDispatch />, badge: stats.new },
+    { id: 'org-calendar', path: 'org-calendar', label: '组织日历', icon: <NavIconCalendar /> },
     { id: 'approvals', path: 'approvals', label: '负责人申请', icon: <NavIconApprovals /> },
     { id: 'resources', path: 'resources', label: '资源目录', icon: <NavIconResources />, children: [
       { id: 'resource-employees', path: 'resources/employees', label: '员工', badge: state.employees?.length ?? 0 },
@@ -748,9 +770,10 @@ export default function WorkOrderWorkspacePage() {
     : view === '概览' ? 'overview'
       : view === '工单管理' ? 'work-orders'
         : view === '派发看板' ? 'dispatch'
-          : view === '资源目录' ? `resources/${resourceTab}`
-            : view === '角色权限' ? 'roles'
-              : 'approvals'
+          : view === '组织日历' ? 'org-calendar'
+            : view === '资源目录' ? `resources/${resourceTab}`
+              : view === '角色权限' ? 'roles'
+                : 'approvals'
 
   return <AppLayout sidebarCollapsed={sidebarCollapsed} onSidebarCollapseChange={setSidebarCollapsed}
     sidebar={<AppSidebar
@@ -779,6 +802,9 @@ export default function WorkOrderWorkspacePage() {
         } else if (path === 'roles') {
           setSelectedId(null)
           setView('角色权限')
+        } else if (path === 'org-calendar') {
+          setSelectedId(null)
+          setView('组织日历')
         } else {
           setView(path === 'dispatch' ? '派发看板' : path === 'work-orders' ? '工单管理' : path === 'approvals' ? '负责人申请' : '概览')
         }
@@ -819,9 +845,10 @@ export default function WorkOrderWorkspacePage() {
           : view === '概览' ? '查看工单规模、SLA 风险、工程师负载与处理趋势。'
             : view === '工单管理' ? '管理工单字段、跨记录操作和业务历史。'
               : view === '派发看板' ? '按实时工作负载和接单状态安排工程师任务。'
-                : view === '负责人申请' ? '集中查看负责人变更申请、审批状态和处理结果。'
-                  : view === '角色权限' ? '管理 IT 服务工作台独立测试角色（与库存角色互不影响），并可跳转本台页面验证门控。'
-                    : '核对员工、部门与服务类别的当前 Dataverse 字段。'}
+                : view === '组织日历' ? '基于 Graph 组织日历查看工程师日 / 周 / 月忙闲，辅助派单决策。'
+                  : view === '负责人申请' ? '集中查看负责人变更申请、审批状态和处理结果。'
+                    : view === '角色权限' ? '管理 IT 服务工作台独立测试角色（与库存角色互不影响），并可跳转本台页面验证门控。'
+                      : '核对员工、部门与服务类别的当前 Dataverse 字段。'}
         actions={workspaceId === 'inventory' ? <div className="page-header-actions">
           <span className="inventory-role-chip" title="当前库存测试角色">角色 · {activeInventoryRole.name}</span>
           <button className="button button-quiet" type="button" onClick={() => setInventoryView('roles')}>角色权限</button>
@@ -947,6 +974,11 @@ export default function WorkOrderWorkspacePage() {
           canAssign={can('it.assign')}
           onRequestAssignment={requestDragAssignment}
           onOpenWorkOrder={(workOrder) => setSelectedId(workOrder.id)}
+        />}
+        {workspaceId === 'it-service' && view === '组织日历' && <OrgCalendarPage
+          employees={state.employees ?? []}
+          workOrders={state.workOrders}
+          loadingEmployees={loading}
         />}
         {workspaceId === 'it-service' && view === '负责人申请' && <AssignmentApprovalRequestsPage active refreshToken={refreshToken}
           onRefresh={() => setRefreshToken((value) => value + 1)}
