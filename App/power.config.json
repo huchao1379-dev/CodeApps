@@ -37,6 +37,18 @@
           }
         }
       }
+    },
+    "09b1cee3-ba7f-4954-92e7-0f61a04e7de4": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+      "displayName": "Logic flows",
+      "dataSources": [
+        "ai___"
+      ],
+      "workflowDetails": {
+        "workflowEntityId": "deef3d99-60de-f111-84e8-000d3a815930",
+        "workflowDisplayName": "AI建工单",
+        "workflowName": "b3d6f085-65e9-09ae-d21a-ca364555d70f"
+      }
     }
   },
   "databaseReferences": {

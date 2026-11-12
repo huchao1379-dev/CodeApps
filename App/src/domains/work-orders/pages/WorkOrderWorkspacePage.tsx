@@ -36,6 +36,10 @@ import {
   StatusDialog,
   WorkOrderFormDialog,
 } from '../components/WorkOrderActionDialogs'
+import {
+  AiWorkOrderCreateDialog,
+  CreateWorkOrderChoiceDialog,
+} from '../components/AiWorkOrderCreateDialogs'
 import { Toast } from '../../../shared/components'
 import type { BulkAction, DatePeriod, FilterDefinition, FilterValues, SortState } from '../../../shared/components'
 import { AppHeader, AppLayout, AppSidebar, PageContainer } from '../../../workbench/layout'
@@ -216,7 +220,8 @@ export default function WorkOrderWorkspacePage() {
   useEffect(() => { setPage((current) => Math.min(current, pageCount)) }, [pageCount])
 
   const openDialog = (mode: WorkOrderDialogMode) => {
-    const permission: AppPermission | null = mode === 'create' ? 'it.create'
+    const permission: AppPermission | null = mode === 'create' || mode === 'create-choice' || mode === 'create-ai'
+      ? 'it.create'
       : mode === 'edit' ? 'it.edit'
         : mode === 'assign' ? 'it.assign'
           : mode === 'unassign' ? 'it.unassign'
@@ -225,6 +230,11 @@ export default function WorkOrderWorkspacePage() {
     if (permission && !ensureIt(permission)) return
     setDialogError(null)
     setDialog(mode)
+  }
+
+  const openCreateChooser = () => {
+    setSelectedId(null)
+    openDialog('create-choice')
   }
 
   const runMutation = async (action: () => Promise<void | string>, successMessage: string) => {
@@ -901,7 +911,7 @@ export default function WorkOrderWorkspacePage() {
                 : activeDepartments.length === 0 || activeCategories.length === 0
                   ? '需要有效的部门和服务类别记录'
                   : undefined}
-              onClick={() => { setSelectedId(null); openDialog('create') }}
+              onClick={openCreateChooser}
             ><span className="plus-mark">＋</span>新建工单</button>}
           </>}
         </div> : undefined}>
@@ -962,7 +972,7 @@ export default function WorkOrderWorkspacePage() {
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
           onBatchAction={requestBatchAction}
           onClearSelection={() => setSelectedWorkOrderKeys([])}
-          onCreate={() => { setSelectedId(null); openDialog('create') }}
+          onCreate={openCreateChooser}
           onRetryLoad={() => setRefreshToken((value) => value + 1)}
           onClearLinkedFilter={() => { setLinkedWorkOrderIds(null); setLinkedFilterLabel(null); setServerFilterNote(null); setPage(1) }}
           onClearServerFilter={() => { setServerFilterNote(null); setLinkedWorkOrderIds(null); setLinkedFilterLabel(null); setPage(1) }}
@@ -1014,6 +1024,22 @@ export default function WorkOrderWorkspacePage() {
       onChangeStatus={() => openDialog('status')}
     />}
 
+    <CreateWorkOrderChoiceDialog
+      open={dialog === 'create-choice'}
+      busy={busy}
+      onClose={() => !busy && setDialog(null)}
+      onManual={() => openDialog('create')}
+      onAi={() => openDialog('create-ai')}
+    />
+    <AiWorkOrderCreateDialog
+      open={dialog === 'create-ai'}
+      departments={state.departments ?? []}
+      categories={state.serviceCategories ?? []}
+      busy={busy}
+      error={dialogError}
+      onClose={() => !busy && setDialog(null)}
+      onSubmit={submitWorkOrder}
+    />
     <WorkOrderFormDialog open={dialog === 'create' || dialog === 'edit'} workOrder={dialog === 'edit' ? selectedWorkOrder : null}
       departments={state.departments ?? []} categories={state.serviceCategories ?? []} busy={busy} error={dialogError}
       onClose={() => !busy && setDialog(null)} onSubmit={submitWorkOrder} />

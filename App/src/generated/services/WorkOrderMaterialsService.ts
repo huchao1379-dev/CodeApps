@@ -14,28 +14,43 @@ export class WorkOrderMaterialsService {
   private static readonly dataSourceName = 'workordermaterials';
 
   private static readonly client = getClient(dataSourcesInfo);
+  private static readonly choiceFields = ["MaterialType"] as const;
+
+  private static serializeChoiceFields(record: object): Record<string, unknown> {
+    const serialized: Record<string, unknown> = { ...record };
+    for (const field of WorkOrderMaterialsService.choiceFields) {
+      const value = serialized[field];
+      if (typeof value === 'string') {
+        serialized[field] = { Value: value };
+      } else if (Array.isArray(value)) {
+        serialized[field] = value.map((choice) => typeof choice === 'string' ? { Value: choice } : choice);
+      }
+    }
+    return serialized;
+  }
 
   public static async create(record: Omit<WorkOrderMaterialsWrite, 'ID'>): Promise<IOperationResult<WorkOrderMaterialsRead>> {
-    const result = await WorkOrderMaterialsService.client.createRecordAsync<Omit<WorkOrderMaterialsWrite, 'ID'>, WorkOrderMaterialsRead>(
+    const result = await WorkOrderMaterialsService.client.createRecordAsync<Record<string, unknown>, WorkOrderMaterialsRead>(
       WorkOrderMaterialsService.dataSourceName,
-      record
+      WorkOrderMaterialsService.serializeChoiceFields(record)
     );
     return result;
   }
 
   public static async update(id: string, changedFields: Partial<Omit<WorkOrderMaterialsWrite, 'ID'>>): Promise<IOperationResult<WorkOrderMaterialsRead>> {
-    const result = await WorkOrderMaterialsService.client.updateRecordAsync<Partial<Omit<WorkOrderMaterialsWrite, 'ID'>>, WorkOrderMaterialsRead>(
+    const result = await WorkOrderMaterialsService.client.updateRecordAsync<Record<string, unknown>, WorkOrderMaterialsRead>(
       WorkOrderMaterialsService.dataSourceName,
       id,
-      changedFields
+      WorkOrderMaterialsService.serializeChoiceFields(changedFields)
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
-    await WorkOrderMaterialsService.client.deleteRecordAsync(
+  public static async delete(id: string): Promise<IOperationResult<void>> {
+    const result = await WorkOrderMaterialsService.client.deleteRecordAsync(
       WorkOrderMaterialsService.dataSourceName,
       id);
+    return result;
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<WorkOrderMaterialsRead>> {

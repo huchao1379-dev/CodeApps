@@ -24,19 +24,22 @@ export class SystemuserrolescollectionService {
     return result;
   }
 
-  public static async update(id: string, changedFields: Partial<Omit<Systemuserrolescollection, 'systemuserroleid'>>): Promise<IOperationResult<Systemuserrolescollection>> {
+  public static async update(id: string, changedFields: Partial<Omit<Systemuserrolescollection, 'systemuserroleid'>>, partitionId?: string): Promise<IOperationResult<Systemuserrolescollection>> {
     const result = await SystemuserrolescollectionService.client.updateRecordAsync<Partial<Omit<Systemuserrolescollection, 'systemuserroleid'>>, Systemuserrolescollection>(
       SystemuserrolescollectionService.dataSourceName,
       id,
-      changedFields
+      changedFields,
+      partitionId
     );
     return result;
   }
 
-  public static async delete(id: string): Promise<void> {
-    await SystemuserrolescollectionService.client.deleteRecordAsync(
+  public static async delete(id: string, partitionId?: string): Promise<IOperationResult<void>> {
+    const result = await SystemuserrolescollectionService.client.deleteRecordAsync(
       SystemuserrolescollectionService.dataSourceName,
-      id);
+      id,
+      partitionId);
+    return result;
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Systemuserrolescollection>> {

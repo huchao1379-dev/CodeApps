@@ -1,0 +1,94 @@
+.create-choice-grid {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 4px;
+}
+
+.create-choice-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid #e3e8ef;
+  border-radius: 12px;
+  background: #fbfcfe;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.create-choice-card:hover:not(:disabled) {
+  border-color: #c9bfff;
+  background: #f7f5ff;
+  box-shadow: 0 8px 20px #453b8120;
+}
+
+.create-choice-card:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.create-choice-card strong {
+  color: #243247;
+  font-size: 14px;
+}
+
+.create-choice-card span {
+  color: #6b7789;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.create-choice-card-ai {
+  border-color: #ddd4ff;
+  background: linear-gradient(180deg, #faf8ff 0%, #f4f0ff 100%);
+}
+
+.ai-create-modal {
+  width: min(640px, 100%);
+}
+
+.ai-parse-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.ai-draft-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #e8ecf2;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #5a6576;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.field-low-confidence input,
+.field-low-confidence select,
+.field-low-confidence textarea {
+  border-color: #e3a3a9 !important;
+  background: #fff7f7;
+}
+
+.field-low-confidence::after {
+  content: '低置信，请确认';
+  display: block;
+  margin-top: 4px;
+  color: #b54e59;
+  font-size: 10px;
+}
+
+.ai-create-modal textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  font: inherit;
+  line-height: 1.45;
+}

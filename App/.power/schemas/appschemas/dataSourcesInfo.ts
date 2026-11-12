@@ -5,68 +5,45 @@
  */
 
 export const dataSourcesInfo = {
-  "cr590_assignments": {
+  "_e8187cbf": {
     "tableId": "",
     "version": "",
-    "primaryKey": "cr590_assignmentid",
-    "dataSourceType": "Dataverse",
-    "apis": {}
-  },
-  "cr590_assignmentapprovalrequests": {
-    "tableId": "",
-    "version": "",
-    "primaryKey": "cr590_assignmentapprovalrequestid",
-    "dataSourceType": "Dataverse",
-    "apis": {}
-  },
-  "cr590_table1s": {
-    "tableId": "",
-    "version": "",
-    "primaryKey": "cr590_table1id",
-    "dataSourceType": "Dataverse",
-    "apis": {}
-  },
-  "cr590_table2s": {
-    "tableId": "",
-    "version": "",
-    "primaryKey": "cr590_table2id",
-    "dataSourceType": "Dataverse",
-    "apis": {}
-  },
-  "cr590_servicecategories": {
-    "tableId": "",
-    "version": "",
-    "primaryKey": "cr590_servicecategoryid",
-    "dataSourceType": "Dataverse",
-    "apis": {}
-  },
-  "systemuserrolescollection": {
-    "tableId": "",
-    "version": "",
-    "primaryKey": "systemuserroleid",
-    "dataSourceType": "Dataverse",
-    "apis": {}
-  },
-  "roles": {
-    "tableId": "",
-    "version": "",
-    "primaryKey": "roleid",
-    "dataSourceType": "Dataverse",
-    "apis": {}
-  },
-  "cr590_workorders": {
-    "tableId": "",
-    "version": "",
-    "primaryKey": "cr590_workorderid",
-    "dataSourceType": "Dataverse",
-    "apis": {}
-  },
-  "cr590_tables": {
-    "tableId": "",
-    "version": "",
-    "primaryKey": "cr590_tableid",
-    "dataSourceType": "Dataverse",
-    "apis": {}
+    "primaryKey": "",
+    "dataSourceType": "Connector",
+    "apis": {
+      "Run": {
+        "path": "/{connectionId}/triggers/manual/run",
+        "method": "POST",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "input",
+            "in": "body",
+            "required": true,
+            "type": "object"
+          },
+          {
+            "name": "api-version",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responseInfo": {
+          "200": {
+            "type": "object"
+          },
+          "default": {
+            "type": "object"
+          }
+        }
+      }
+    }
   },
   "_e8187cbf.schema": {
     "tableId": "",
@@ -108,6 +85,149 @@ export const dataSourcesInfo = {
       }
     }
   },
+  "ai___": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "",
+    "dataSourceType": "Connector",
+    "apis": {
+      "Run": {
+        "path": "/{connectionId}/triggers/manual/run",
+        "method": "POST",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "input",
+            "in": "body",
+            "required": true,
+            "type": "object"
+          },
+          {
+            "name": "api-version",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responseInfo": {
+          "200": {
+            "type": "object"
+          },
+          "default": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "ai___.schema": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "",
+    "dataSourceType": "Connector",
+    "apis": {
+      "Run": {
+        "path": "/{connectionId}/triggers/manual/run",
+        "method": "POST",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "input",
+            "in": "body",
+            "required": true,
+            "type": "object"
+          },
+          {
+            "name": "api-version",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responseInfo": {
+          "200": {
+            "type": "object"
+          },
+          "default": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "cr590_assignmentapprovalrequests": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr590_assignmentapprovalrequestid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr590_assignments": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr590_assignmentid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr590_servicecategories": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr590_servicecategoryid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr590_table1s": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr590_table1id",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr590_table2s": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr590_table2id",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr590_tables": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr590_tableid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr590_workorders": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr590_workorderid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "roles": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "roleid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "systemuserrolescollection": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "systemuserroleid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "workordermaterials": {
     "tableId": "WorkOrderMaterials",
     "version": "",
@@ -115,7 +235,7 @@ export const dataSourcesInfo = {
     "dataSourceType": "Connector",
     "apis": {
       "GetMaterialType": {
-        "path": "/{connectionId}/datasets/{dataset}/tables/47537ce8439747058f806147144a4961/entities/MaterialType",
+        "path": "/{connectionId}/datasets/{dataset}/tables/{tableName}/entities/MaterialType",
         "method": "GET",
         "parameters": [
           {
@@ -131,7 +251,7 @@ export const dataSourcesInfo = {
             "type": "string"
           },
           {
-            "name": "table",
+            "name": "tableName",
             "in": "path",
             "required": true,
             "type": "string"
@@ -150,7 +270,7 @@ export const dataSourcesInfo = {
         }
       },
       "GetEditor": {
-        "path": "/{connectionId}/datasets/{dataset}/tables/47537ce8439747058f806147144a4961/entities/Editor",
+        "path": "/{connectionId}/datasets/{dataset}/tables/{tableName}/entities/Editor",
         "method": "GET",
         "parameters": [
           {
@@ -166,7 +286,7 @@ export const dataSourcesInfo = {
             "type": "string"
           },
           {
-            "name": "table",
+            "name": "tableName",
             "in": "path",
             "required": true,
             "type": "string"
@@ -185,7 +305,7 @@ export const dataSourcesInfo = {
         }
       },
       "GetAuthor": {
-        "path": "/{connectionId}/datasets/{dataset}/tables/47537ce8439747058f806147144a4961/entities/Author",
+        "path": "/{connectionId}/datasets/{dataset}/tables/{tableName}/entities/Author",
         "method": "GET",
         "parameters": [
           {
@@ -201,7 +321,7 @@ export const dataSourcesInfo = {
             "type": "string"
           },
           {
-            "name": "table",
+            "name": "tableName",
             "in": "path",
             "required": true,
             "type": "string"
@@ -220,7 +340,7 @@ export const dataSourcesInfo = {
         }
       },
       "GetCheckoutUser": {
-        "path": "/{connectionId}/datasets/{dataset}/tables/47537ce8439747058f806147144a4961/entities/CheckoutUser",
+        "path": "/{connectionId}/datasets/{dataset}/tables/{tableName}/entities/CheckoutUser",
         "method": "GET",
         "parameters": [
           {
@@ -236,7 +356,7 @@ export const dataSourcesInfo = {
             "type": "string"
           },
           {
-            "name": "table",
+            "name": "tableName",
             "in": "path",
             "required": true,
             "type": "string"
@@ -255,7 +375,7 @@ export const dataSourcesInfo = {
         }
       },
       "Get4651e8f238c94ad08def41f743f76f30": {
-        "path": "/{connectionId}/datasets/{dataset}/tables/47537ce8439747058f806147144a4961/entities/4651e8f238c94ad08def41f743f76f30",
+        "path": "/{connectionId}/datasets/{dataset}/tables/{tableName}/entities/4651e8f238c94ad08def41f743f76f30",
         "method": "GET",
         "parameters": [
           {
@@ -271,7 +391,7 @@ export const dataSourcesInfo = {
             "type": "string"
           },
           {
-            "name": "table",
+            "name": "tableName",
             "in": "path",
             "required": true,
             "type": "string"
