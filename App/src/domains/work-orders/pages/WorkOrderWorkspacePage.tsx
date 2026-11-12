@@ -40,6 +40,7 @@ import {
   AiWorkOrderCreateDialog,
   CreateWorkOrderChoiceDialog,
 } from '../components/AiWorkOrderCreateDialogs'
+import { AiAssistantDock } from '../../../shared/components/ai-assistant/AiAssistantDock'
 import { Toast } from '../../../shared/components'
 import type { BulkAction, DatePeriod, FilterDefinition, FilterValues, SortState } from '../../../shared/components'
 import { AppHeader, AppLayout, AppSidebar, PageContainer } from '../../../workbench/layout'
@@ -1064,6 +1065,16 @@ export default function WorkOrderWorkspacePage() {
       seedPhase={seedPhase}
       onClose={() => setSeedDialogOpen(false)}
       onConfirm={() => { void seedTestData() }}
+    />
+
+    <AiAssistantDock
+      departments={state.departments ?? []}
+      categories={state.serviceCategories ?? []}
+      workOrders={state.workOrders}
+      employees={state.employees ?? []}
+      canCreate={can('it.create')}
+      createBusy={busy}
+      onCreateWorkOrder={submitWorkOrder}
     />
   </AppLayout>
 }
