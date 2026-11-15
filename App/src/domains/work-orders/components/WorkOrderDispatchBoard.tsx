@@ -100,7 +100,7 @@ export function WorkOrderDispatchBoard({
 
   return <section className="dispatch-board" aria-label="工单派发看板">
     <header className="feature-heading"><div><span className="feature-eyebrow">DISPATCH WORKBENCH</span><h2>拖拽 / 点击派发</h2>
-      <p>默认可派单区只显示可接单且未满负载的工程师；已分配工单可左右滑动查看。</p></div>
+      <p>默认可派单区只显示可接单且未满负载的工程师；也可把待分派工单拖到右下角 AI 助手，询问更适合派给谁。</p></div>
       <div className="dispatch-backlog-count"><strong>{backlog.length}</strong><span>待分派工单</span></div>
     </header>
     {selectedBacklog && <div className="dispatch-selection-chip" role="status">
@@ -120,7 +120,8 @@ export function WorkOrderDispatchBoard({
               onDragStart={(event) => {
                 setSelectedBacklogId(workOrder.id)
                 event.dataTransfer.setData('text/work-order-id', workOrder.id)
-                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', workOrder.id)
+                event.dataTransfer.effectAllowed = 'copyMove'
               }}>
               <button className="dispatch-order-title" type="button" onClick={(event) => { event.stopPropagation(); onOpenWorkOrder(workOrder) }}>{workOrder.workOrderName}</button>
               <span className="dispatch-order-number">{workOrder.workOrderNumber || '编号待生成'}</span>

@@ -26,6 +26,7 @@ import type { Cr590_workorders } from '../../../generated/models/Cr590_workorder
 import { Cr590_workorderscr590_priority, Cr590_workorderscr590_status } from '../../../generated/models/Cr590_workordersModel'
 import {
   PRIORITY,
+  STATUS_LABELS,
   WORK_ORDER_STATUS,
   type AssignmentEvent,
   type DepartmentOption,
@@ -514,6 +515,286 @@ export async function loadWorkOrdersByServerPreset(preset: ServerWorkOrderQueryP
 export async function loadActiveOverdueWorkOrdersFromDataverse(): Promise<WorkOrder[]> {
   const result = await loadWorkOrdersByServerPreset('active-overdue')
   return result.orders
+}
+
+function escapeODataString(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+async function countWorkOrders(filter: string): Promise<number> {
+  let result: IOperationResult<Cr590_workorders[]>
+  try {
+    result = await Cr590_workordersService.getAll({
+      select: ['cr590_workorderid'],
+      filter,
+      top: 1,
+      maxPageSize: 1,
+      count: true,
+    })
+  } catch (error) {
+    throw toDataverseError('cr590_workorders', error)
+  }
+  const rows = unwrap(result, 'cr590_workorders')
+  return result.count ?? rows.length
+}
+
+/** Keyword search against work order number / name / description (server-side contains). */
+export async function searchWorkOrdersFromDataverse(
+  keyword: string,
+  top = 20,
+): Promise<{ filter: string; orders: WorkOrder[] }> {
+  const needle = keyword.trim()
+  if (!needle) return { filter: '', orders: [] }
+  const escaped = escapeODataString(needle.slice(0, 80))
+  const filter = [
+    '(statecode eq 0)',
+    `(contains(cr590_workordernumber,'${escaped}') or contains(cr590_workordername,'${escaped}') or contains(cr590_issuedescription,'${escaped}'))`,
+  ].join(' and ')
+  let result: IOperationResult<Cr590_workorders[]>
+  try {
+    result = await Cr590_workordersService.getAll({
+      select: WORK_ORDER_SELECT,
+      filter,
+      orderBy: ['modifiedon desc'],
+      top: Math.min(Math.max(1, top), 50),
+      maxPageSize: Math.min(Math.max(1, top), PAGE_SIZE),
+    })
+  } catch (error) {
+    throw toDataverseError('cr590_workorders', error)
+  }
+  const rows = unwrap(result, 'cr590_workorders')
+  return {
+    filter,
+    orders: rows.map((record) => mapWorkOrder(record as WorkOrderRecord)),
+  }
+}
+
+export type AssigneeWorkOrderSearchResult = {
+  filter: string
+  employeeFilter: string
+  assigneeName: string
+  matchedEmployees: Array<{ id: string; name: string }>
+  orders: WorkOrder[]
+  total: number
+}
+
+/**
+ * Resolve employee(s) by name, then list/count work orders assigned to them
+ * via `_cr590_assignedto_value` (server-side $filter).
+ */
+export async function searchWorkOrdersByAssigneeNameFromDataverse(
+  assigneeName: string,
+  top = 20,
+): Promise<AssigneeWorkOrderSearchResult> {
+  const needle = assigneeName.trim()
+  if (!needle) {
+    return { filter: '', employeeFilter: '', assigneeName: needle, matchedEmployees: [], orders: [], total: 0 }
+  }
+
+  const escaped = escapeODataString(needle.slice(0, 40))
+  const employeeFilter = `(statecode eq 0) and contains(cr590_employeename,'${escaped}')`
+  let employeeResult: IOperationResult<Cr590_table2s[]>
+  try {
+    employeeResult = await Cr590_table2sService.getAll({
+      select: EMPLOYEE_SELECT,
+      filter: employeeFilter,
+      orderBy: ['cr590_employeename asc'],
+      top: 10,
+      maxPageSize: 10,
+    })
+  } catch (error) {
+    throw toDataverseError('cr590_table2s', error)
+  }
+
+  const employees = unwrap(employeeResult, 'cr590_table2s')
+    .map((record) => mapEmployee(record as EmployeeRecord))
+    .filter((employee) => Boolean(employee.id))
+
+  const exact = employees.filter((employee) => {
+    const name = employee.employeeName.trim().toLocaleLowerCase()
+    const hint = needle.toLocaleLowerCase()
+    return name === hint || name.includes(hint)
+  })
+  const targets = exact.length > 0 ? exact : employees
+  const matchedEmployees = targets.map((employee) => ({
+    id: employee.id.replace(/[{}]/g, ''),
+    name: employee.employeeName,
+  }))
+
+  if (matchedEmployees.length === 0) {
+    return {
+      filter: '',
+      employeeFilter,
+      assigneeName: needle,
+      matchedEmployees: [],
+      orders: [],
+      total: 0,
+    }
+  }
+
+  const assigneeClause = matchedEmployees
+    .map((employee) => `_cr590_assignedto_value eq ${employee.id}`)
+    .join(' or ')
+  const filter = `(statecode eq 0) and (${assigneeClause})`
+  const pageSize = Math.min(Math.max(1, top), 50)
+
+  try {
+    const [total, listed] = await Promise.all([
+      countWorkOrders(filter),
+      Cr590_workordersService.getAll({
+        select: WORK_ORDER_SELECT,
+        filter,
+        orderBy: ['modifiedon desc'],
+        top: pageSize,
+        maxPageSize: Math.min(pageSize, PAGE_SIZE),
+      }),
+    ])
+    const rows = unwrap(listed, 'cr590_workorders')
+    return {
+      filter,
+      employeeFilter,
+      assigneeName: needle,
+      matchedEmployees,
+      orders: rows.map((record) => mapWorkOrder(record as WorkOrderRecord)),
+      total,
+    }
+  } catch (error) {
+    throw toDataverseError('cr590_workorders', error)
+  }
+}
+
+export type WorkOrderDistributionStats = {
+  total: number
+  byStatus: Record<string, number>
+  byPriority: Record<string, number>
+  unassigned: number
+  overdue: number
+  highOrCritical: number
+  filters: string[]
+}
+
+/** Live distribution via parallel Dataverse count queries (not page memory). */
+export async function loadWorkOrderDistributionFromDataverse(): Promise<WorkOrderDistributionStats> {
+  const now = new Date().toISOString()
+  const statusEntries = Object.entries(STATUS_LABELS) as Array<[string, string]>
+  const priorityEntries: Array<[Priority, string]> = [
+    [PRIORITY.low, '低'],
+    [PRIORITY.medium, '普通'],
+    [PRIORITY.high, '高'],
+    [PRIORITY.critical, '紧急'],
+  ]
+
+  const filters: string[] = []
+  const totalFilter = '(statecode eq 0)'
+  filters.push(totalFilter)
+
+  const [
+    total,
+    ...statusCounts
+  ] = await Promise.all([
+    countWorkOrders(totalFilter),
+    ...statusEntries.map(([statusValue]) => {
+      const filter = `(statecode eq 0) and (cr590_status eq ${statusValue})`
+      filters.push(filter)
+      return countWorkOrders(filter)
+    }),
+  ])
+
+  const byStatus: Record<string, number> = {}
+  statusEntries.forEach(([, label], index) => {
+    byStatus[label] = statusCounts[index] ?? 0
+  })
+
+  const priorityCounts = await Promise.all(
+    priorityEntries.map(([priorityValue]) => {
+      const filter = `(statecode eq 0) and (cr590_priority eq ${priorityValue})`
+      filters.push(filter)
+      return countWorkOrders(filter)
+    }),
+  )
+  const byPriority: Record<string, number> = {}
+  priorityEntries.forEach(([, label], index) => {
+    byPriority[label] = priorityCounts[index] ?? 0
+  })
+
+  const unassignedFilter = `(statecode eq 0) and (cr590_status eq ${WORK_ORDER_STATUS.new}) and (_cr590_assignedto_value eq null)`
+  const overdueFilter = [
+    '(statecode eq 0)',
+    '(cr590_expectedcompletiontime ne null)',
+    `(cr590_expectedcompletiontime lt ${now})`,
+    ACTIVE_STATUS_FILTER,
+  ].join(' and ')
+  const highOrCriticalFilter = `(statecode eq 0) and (cr590_priority eq ${PRIORITY.high} or cr590_priority eq ${PRIORITY.critical}) and (cr590_status ne ${WORK_ORDER_STATUS.closed} and cr590_status ne ${WORK_ORDER_STATUS.cancelled})`
+  filters.push(unassignedFilter, overdueFilter, highOrCriticalFilter)
+
+  const [unassigned, overdue, highOrCritical] = await Promise.all([
+    countWorkOrders(unassignedFilter),
+    countWorkOrders(overdueFilter),
+    countWorkOrders(highOrCriticalFilter),
+  ])
+
+  return {
+    total,
+    byStatus,
+    byPriority,
+    unassigned,
+    overdue,
+    highOrCritical,
+    filters,
+  }
+}
+
+export type EmployeeWorkloadRow = {
+  employee: EmployeeOption
+  currentLoad: number
+  remainingCapacity: number | null
+  idle: boolean
+}
+
+/** Active employees + live active-assignment counts from Dataverse. */
+export async function loadEmployeeWorkloadsFromDataverse(): Promise<{
+  rows: EmployeeWorkloadRow[]
+  idle: EmployeeWorkloadRow[]
+  filter: string
+}> {
+  const employees = (await readAllSourceRows('cr590_table2s', (skipToken) => Cr590_table2sService.getAll({
+    select: EMPLOYEE_SELECT,
+    filter: '(statecode eq 0) and (cr590_isactive eq true)',
+    orderBy: ['cr590_employeename asc'],
+    maxPageSize: PAGE_SIZE,
+    ...(skipToken ? { skipToken } : {}),
+  }))).map((record) => mapEmployee(record as EmployeeRecord))
+
+  const activeLoadFilter = `(statecode eq 0) and ${ACTIVE_STATUS_FILTER}`
+  const activeOrders = await readAllSourceRows('cr590_workorders', (skipToken) => Cr590_workordersService.getAll({
+    select: ['cr590_workorderid', '_cr590_assignedto_value'],
+    filter: activeLoadFilter,
+    maxPageSize: PAGE_SIZE,
+    ...(skipToken ? { skipToken } : {}),
+  }))
+
+  const loadByEmployee = new Map<string, number>()
+  for (const row of activeOrders) {
+    const assigneeId = asId((row as WorkOrderRecord)._cr590_assignedto_value)
+    if (!assigneeId) continue
+    loadByEmployee.set(assigneeId, (loadByEmployee.get(assigneeId) ?? 0) + 1)
+  }
+
+  const rows: EmployeeWorkloadRow[] = employees.map((employee) => {
+    const currentLoad = loadByEmployee.get(employee.id) ?? 0
+    const remainingCapacity = employee.maxTaskLoad == null
+      ? null
+      : Math.max(0, employee.maxTaskLoad - currentLoad)
+    const idle = employee.isAvailableForOrder
+      && (employee.maxTaskLoad == null ? currentLoad === 0 : currentLoad < employee.maxTaskLoad)
+    return { employee, currentLoad, remainingCapacity, idle }
+  })
+
+  return {
+    rows,
+    idle: rows.filter((item) => item.idle),
+    filter: activeLoadFilter,
+  }
 }
 
 /** Reads only the target order, employee, and that employee's active workload before assignment. */

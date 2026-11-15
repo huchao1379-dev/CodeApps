@@ -43,7 +43,8 @@ const PERIOD_OPTIONS: Array<{ id: CalendarPeriod; label: string }> = [
   { id: 'month', label: '月' },
 ]
 
-const STATUS_LEGEND: ScheduleAvailability[] = ['busy', 'tentative', 'oof', 'workingElsewhere', 'free']
+const STATUS_LEGEND = ['busy', 'tentative', 'oof', 'workingElsewhere', 'free'] as const
+type LegendStatus = (typeof STATUS_LEGEND)[number]
 
 function statusClass(status: ScheduleAvailability): string {
   return `org-cal-status-${status}`
@@ -173,7 +174,7 @@ export function OrgCalendarPage({ employees, workOrders, loadingEmployees = fals
     return Array.from({ length: 42 }, (_, index) => addDays(start, index))
   }, [anchorDate])
 
-  const summary = useMemo(() => {
+  const summary = useMemo((): Record<LegendStatus, number> | null => {
     if (!schedule) return null
     return {
       busy: slotsForStatus(schedule.availabilityView, 'busy'),

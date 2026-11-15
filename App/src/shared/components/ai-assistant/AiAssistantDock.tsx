@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DEEPSEEK_DEFAULT_BASE_URL,
   DEEPSEEK_DEFAULT_MODEL,
@@ -9,7 +10,9 @@ import {
 } from '../../../integrations/deepseek/deepseekConfig'
 import {
   askDeepSeekAssistant,
+  recommendDispatchAssignment,
   stripAssistantAttribution,
+  type DispatchRecommendation,
 } from '../../../integrations/deepseek/deepseekAssistantService'
 import {
   toWorkOrderInputFromAiDraft,
@@ -30,7 +33,7 @@ type ChatItem = {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
-  source?: 'local-data' | 'deepseek'
+  source?: 'local-data' | 'deepseek' | 'deepseek-web' | 'dataverse'
 }
 
 type DockPosition = {
@@ -44,14 +47,18 @@ type AiAssistantDockProps = {
   workOrders: WorkOrder[]
   employees: EmployeeOption[]
   canCreate: boolean
+  canAssign?: boolean
   createBusy?: boolean
   onCreateWorkOrder: (input: WorkOrderInput) => Promise<void> | void
+  onRequestAssignment?: (workOrder: WorkOrder, employee: EmployeeOption) => void
 }
 
 const POSITION_STORAGE_KEY = 'opsdesk.aiAssistant.position'
 const FAB_SIZE = 56
 const PANEL_WIDTH = 380
 const PANEL_GAP = 12
+/** Extra inset so the FAB clears Power Apps player chrome / safe areas. */
+const SHELL_INSET = 72
 
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -60,8 +67,8 @@ function uid() {
 function defaultPosition(): DockPosition {
   if (typeof window === 'undefined') return { left: 24, top: 24 }
   return {
-    left: Math.max(12, window.innerWidth - FAB_SIZE - 24),
-    top: Math.max(12, window.innerHeight - FAB_SIZE - 24),
+    left: Math.max(12, window.innerWidth - FAB_SIZE - SHELL_INSET),
+    top: Math.max(12, window.innerHeight - FAB_SIZE - SHELL_INSET),
   }
 }
 
@@ -121,20 +128,24 @@ export function AiAssistantDock({
   workOrders,
   employees,
   canCreate,
+  canAssign = false,
   createBusy = false,
   onCreateWorkOrder,
+  onRequestAssignment,
 }: AiAssistantDockProps) {
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [forceCreate, setForceCreate] = useState(false)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [dropActive, setDropActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<AiWorkOrderDraft | null>(null)
+  const [dispatchAdvice, setDispatchAdvice] = useState<DispatchRecommendation | null>(null)
   const [messages, setMessages] = useState<ChatItem[]>([{
     id: 'welcome',
     role: 'system',
-    content: '我是 DeepSeek 助手：可聊日常问题，也可查询工单/空闲员工；需要建单时切换「建单模式」。按住标题栏或 AI 按钮可拖动。',
+    content: '我是 DeepSeek 助手：查工单/空闲/逾期等会走 Dataverse 实时查询；外网问题可 Search/Fetch。也可从派发看板把待分派工单拖到这里问派给谁。按住标题栏或 AI 按钮可拖动。',
   }])
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [baseUrlInput, setBaseUrlInput] = useState(DEEPSEEK_DEFAULT_BASE_URL)
@@ -144,6 +155,7 @@ export function AiAssistantDock({
   const [modelLabel, setModelLabel] = useState(getDeepSeekModel())
   const [position, setPosition] = useState<DockPosition>(() => clampPosition(readStoredPosition() ?? defaultPosition()))
   const [dragging, setDragging] = useState(false)
+  const [portalReady, setPortalReady] = useState(() => typeof document !== 'undefined')
   const listRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const positionRef = useRef(position)
@@ -322,13 +334,20 @@ export function AiAssistantDock({
       })
 
       const sourceLabel = result.source === 'local-data'
-        ? 'local-data（浏览器已加载的工单/员工）'
-        : getDeepSeekModel()
+        ? 'local-data（页面缓存降级）'
+        : result.source === 'dataverse'
+          ? 'dataverse（实时 $filter）'
+          : result.source === 'deepseek-web'
+            ? `${getDeepSeekModel()} + web`
+            : getDeepSeekModel()
+      const citationBlock = result.citations?.length
+        ? `\n\n来源：\n${result.citations.slice(0, 5).map((item, index) => `${index + 1}. ${item.title}\n${item.url}`).join('\n')}`
+        : ''
       setMessages((current) => [...current, {
         id: uid(),
         role: 'assistant',
         source: result.source,
-        content: `${stripAssistantAttribution(result.reply)}\n\n— via ${sourceLabel}`,
+        content: `${stripAssistantAttribution(result.reply)}${citationBlock}\n\n— via ${sourceLabel}`,
       }])
       setDraft(result.intent === 'create_work_order' ? (result.draft ?? null) : null)
     } catch (caught) {
@@ -358,14 +377,117 @@ export function AiAssistantDock({
     }
   }
 
-  return <>
+  const runDispatchAdvice = async (workOrderId: string) => {
+    const workOrder = workOrders.find((item) => item.id === workOrderId)
+    if (!workOrder) {
+      setError('未找到拖入的工单，请刷新后重试。')
+      return
+    }
+    setOpen(true)
+    setForceCreate(false)
+    setDraft(null)
+    setDispatchAdvice(null)
+    setBusy(true)
+    setError(null)
+    setMessages((current) => [...current, {
+      id: uid(),
+      role: 'user',
+      content: `请根据当前人员负载，建议把工单「${workOrder.workOrderNumber || workOrder.workOrderName}」派给谁？`,
+    }])
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    try {
+      const advice = await recommendDispatchAssignment({
+        workOrder,
+        employees,
+        workOrders,
+        signal: controller.signal,
+      })
+      const sourceLabel = advice.source === 'local-data'
+        ? 'local-data（负载规则）'
+        : getDeepSeekModel()
+      setDispatchAdvice(advice)
+      setMessages((current) => [...current, {
+        id: uid(),
+        role: 'assistant',
+        source: advice.source,
+        content: `${stripAssistantAttribution(advice.reply)}\n\n— via ${sourceLabel}`,
+      }])
+    } catch (caught) {
+      if (controller.signal.aborted) return
+      const message = caught instanceof Error ? caught.message : '派发建议失败。'
+      if (/API Key/i.test(message)) setSettingsOpen(true)
+      setError(message)
+      setMessages((current) => [...current, { id: uid(), role: 'system', content: message }])
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null
+      setBusy(false)
+    }
+  }
+
+  const onWorkOrderDragOver = (event: DragEvent<HTMLElement>) => {
+    const types = [...event.dataTransfer.types]
+    // Some browsers expose custom types only as 'Text' / lowercase variants during dragover.
+    const canAccept = types.some((type) => (
+      type === 'text/work-order-id'
+      || type === 'text/plain'
+      || type.toLowerCase() === 'text'
+    ))
+    if (!canAccept) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setDropActive(true)
+  }
+
+  const onWorkOrderDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    setDropActive(false)
+  }
+
+  const onWorkOrderDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    setDropActive(false)
+    const workOrderId = event.dataTransfer.getData('text/work-order-id') || event.dataTransfer.getData('text/plain')
+    if (!workOrderId) {
+      setError('未识别到工单，请从派发看板的待分派列表拖入。')
+      return
+    }
+    void runDispatchAdvice(workOrderId)
+  }
+
+  const assignFromAdvice = (employee: EmployeeOption) => {
+    if (!dispatchAdvice || !onRequestAssignment || !canAssign) return
+    const workOrder = workOrders.find((item) => item.id === dispatchAdvice.workOrderId)
+    if (!workOrder) {
+      setError('工单已不存在或已变更，请重新拖入。')
+      return
+    }
+    onRequestAssignment(workOrder, employee)
+    setMessages((current) => [...current, {
+      id: uid(),
+      role: 'system',
+      content: `已发起派给「${employee.employeeName}」的派发流程（仍走系统原有派发/审批，不是 AI 直接改库）。`,
+    }])
+  }
+
+  useEffect(() => {
+    setPortalReady(typeof document !== 'undefined')
+  }, [])
+
+  // Portal to body so Power Apps player transform/overflow cannot clip the FAB.
+  const dock = <>
     <div
-      className={`ai-dock-fab${open ? ' is-open' : ''}${dragging ? ' is-dragging' : ''}`}
+      className={`ai-dock-fab${open ? ' is-open' : ''}${dragging ? ' is-dragging' : ''}${dropActive ? ' is-drop-target' : ''}`}
       role="button"
       tabIndex={0}
       style={{ left: position.left, top: position.top, right: 'auto', bottom: 'auto' }}
       aria-label={open ? '关闭智能助手' : '打开智能助手'}
       onPointerDown={(event) => beginDrag(event, true)}
+      onDragOver={onWorkOrderDragOver}
+      onDragLeave={onWorkOrderDragLeave}
+      onDrop={onWorkOrderDrop}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
@@ -377,9 +499,12 @@ export function AiAssistantDock({
     </div>
 
     {open && <section
-      className={`ai-dock-panel${dragging ? ' is-dragging' : ''}`}
+      className={`ai-dock-panel${dragging ? ' is-dragging' : ''}${dropActive ? ' is-drop-target' : ''}`}
       style={panelStyle}
       aria-label="DeepSeek 智能助手"
+      onDragOver={onWorkOrderDragOver}
+      onDragLeave={onWorkOrderDragLeave}
+      onDrop={onWorkOrderDrop}
     >
       <header
         className="ai-dock-header ai-dock-drag-handle"
@@ -432,10 +557,37 @@ export function AiAssistantDock({
         >建单模式</button>
       </div>
 
+      {dropActive && <div className="ai-dock-drop-hint" role="status">松开以询问：该工单更适合派给谁</div>}
+
       <div className="ai-dock-messages" ref={listRef}>
         {messages.map((item) => (
           <div key={item.id} className={`ai-dock-bubble role-${item.role}`}>{item.content}</div>
         ))}
+
+        {dispatchAdvice && (dispatchAdvice.primary || dispatchAdvice.alternatives.length > 0) && <div className="ai-dock-draft">
+          <div className="ai-dock-draft-title">派发建议
+            <span>{dispatchAdvice.source === 'deepseek' ? 'DeepSeek + 负载' : '本地负载规则'}</span>
+          </div>
+          {dispatchAdvice.primary && <button
+            className="button button-primary"
+            type="button"
+            disabled={!canAssign || !onRequestAssignment || busy || createBusy}
+            title={!canAssign ? '当前角色无派发权限' : undefined}
+            onClick={() => assignFromAdvice(dispatchAdvice.primary!)}
+          >建议派给 {dispatchAdvice.primary.employeeName}</button>}
+          {dispatchAdvice.alternatives.length > 0 && <div className="ai-dock-assign-alts">
+            {dispatchAdvice.alternatives.map((employee) => (
+              <button
+                key={employee.id}
+                className="button button-quiet"
+                type="button"
+                disabled={!canAssign || !onRequestAssignment || busy || createBusy}
+                onClick={() => assignFromAdvice(employee)}
+              >备选：{employee.employeeName}</button>
+            ))}
+          </div>}
+          <p className="ai-dock-draft-rationale">AI 只给建议；确认后仍走原有派发/审批流程。</p>
+        </div>}
 
         {draft && <div className="ai-dock-draft">
           <div className="ai-dock-draft-title">工单草稿
@@ -544,4 +696,7 @@ export function AiAssistantDock({
       </footer>
     </section>}
   </>
+
+  if (!portalReady || typeof document === 'undefined') return null
+  return createPortal(dock, document.body)
 }

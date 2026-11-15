@@ -786,7 +786,8 @@ export default function WorkOrderWorkspacePage() {
               : view === '角色权限' ? 'roles'
                 : 'approvals'
 
-  return <AppLayout sidebarCollapsed={sidebarCollapsed} onSidebarCollapseChange={setSidebarCollapsed}
+  return <>
+  <AppLayout sidebarCollapsed={sidebarCollapsed} onSidebarCollapseChange={setSidebarCollapsed}
     sidebar={<AppSidebar
       items={workspaceId === 'inventory' ? inventoryNavItems : itServiceNavItems}
       activePath={activePath}
@@ -1067,14 +1068,17 @@ export default function WorkOrderWorkspacePage() {
       onConfirm={() => { void seedTestData() }}
     />
 
-    <AiAssistantDock
-      departments={state.departments ?? []}
-      categories={state.serviceCategories ?? []}
-      workOrders={state.workOrders}
-      employees={state.employees ?? []}
-      canCreate={can('it.create')}
-      createBusy={busy}
-      onCreateWorkOrder={submitWorkOrder}
-    />
   </AppLayout>
+  <AiAssistantDock
+    departments={state.departments ?? []}
+    categories={state.serviceCategories ?? []}
+    workOrders={state.workOrders}
+    employees={state.employees ?? []}
+    canCreate={can('it.create')}
+    canAssign={can('it.assign')}
+    createBusy={busy}
+    onCreateWorkOrder={submitWorkOrder}
+    onRequestAssignment={requestDragAssignment}
+  />
+  </>
 }

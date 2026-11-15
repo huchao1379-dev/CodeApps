@@ -12,6 +12,5 @@ export interface RolesBase {
 export interface Roles extends RolesBase {
   businessunitid?: object;
   _businessunitid_value?: string;
-  _businessunitid_value?: object;
   __businessunitid_value_value?: string;
 }
