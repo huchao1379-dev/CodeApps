@@ -13,13 +13,19 @@ import {
   type WorkOrder,
 } from '../../domains/work-orders/types/workOrder.types'
 import { createDeepSeekChatCompletion, type DeepSeekChatMessage } from './deepseekClient'
-import { hasDeepSeekApiKey } from './deepseekConfig'
+import { getDeepSeekModel, hasDeepSeekApiKey } from './deepseekConfig'
 import {
   extractAssigneeName,
   formatAssistantDataToolForPrompt,
-  resolveAssistantDataQuery,
   type AssistantDataToolResult,
 } from './assistantDataTools'
+import {
+  formatAssistantQuerySourceLabel,
+  runAssistantQueryPipeline,
+  type AssistantQueryMeta,
+  type AssistantQueryPermissions,
+  type AssistantQuerySource,
+} from './assistantQueryPipeline'
 import {
   deepSeekFetch,
   deepSeekSearch,
@@ -31,7 +37,17 @@ import {
 } from './deepseekToolsClient'
 import { buildWorkspaceSnapshot, formatWorkspaceSnapshotForPrompt } from './workspaceSnapshot'
 
-export type AssistantIntent = 'chat' | 'create_work_order' | 'query'
+export type AssistantIntent = 'chat' | 'create_work_order' | 'update_employee_availability' | 'query'
+
+/** Human-confirmed draft for toggling an employee's 接单状态. AI never writes Dataverse. */
+export type AiEmployeeAvailabilityDraft = {
+  employeeId: string
+  employeeName: string
+  currentAvailable: boolean
+  nextAvailable: boolean
+  rationale: string
+  candidates: Array<{ id: string; employeeName: string; isAvailableForOrder: boolean }>
+}
 
 export type AssistantCitation = {
   title: string
@@ -42,9 +58,14 @@ export type AssistantReply = {
   intent: AssistantIntent
   reply: string
   draft?: AiWorkOrderDraft
+  availabilityDraft?: AiEmployeeAvailabilityDraft
   /** Where the answer came from; UI should show this once. */
-  source: 'local-data' | 'deepseek' | 'deepseek-web' | 'dataverse'
+  source: AssistantQuerySource
   citations?: AssistantCitation[]
+  /** Ops-data pipeline metadata (timing / failures / presentation mode). */
+  queryMeta?: AssistantQueryMeta
+  /** Ready-to-show attribution, e.g. dataverse 只读查询（2/2 步成功 · 320ms） */
+  sourceLabel?: string
 }
 
 /** Remove UI attribution lines so the model does not echo “via …”. */
@@ -106,23 +127,108 @@ function extractJsonObject(raw: string): Record<string, unknown> {
   }
 }
 
+/** 明确修改员工接单状态（人机确认后再写库）。 */
+export function looksLikeAvailabilityUpdate(text: string): boolean {
+  return /(设为|改为|改成|调整|更新|修改|切换).{0,16}(可接单|不可接单|暂不可接单|接单状态)/i.test(text)
+    || /接单状态.{0,12}(设为|改为|改成|调整|更新|修改)/i.test(text)
+    || /(暂停接单|恢复接单|打开接单|关闭接单|停止接单)/i.test(text)
+}
+
 /** 明确查询/统计意图，绝不能走建单。 */
 export function looksLikeDataQuery(text: string): boolean {
+  if (looksLikeAvailabilityUpdate(text)) return false
   return /(查询|查一下|统计|多少|几个|数量|有哪些|列表|概况|概览|汇总|占比|分布|当前.*工单|工单.*(多少|数量|几个)|高优先级|紧急工单|未分派|待派单|代派单|逾期|空闲|可接单|谁可以派|负责人|指派给|分派给|名下|适合|适配|推荐派)/i.test(text)
 }
 
 /** 明确建单意图。 */
 export function looksLikeCreateRequest(text: string): boolean {
-  if (looksLikeDataQuery(text)) return false
-  return /(建单|创建工单|新建工单|帮我创建|提交工单|报修|帮忙处理一下故障|登记工单)/i.test(text)
-    || (/(故障|蓝屏|无法开机|开不了机|连不上网|打印机坏了)/i.test(text) && !/(查询|多少|统计)/i.test(text))
+  if (looksLikeAvailabilityUpdate(text) || looksLikeDataQuery(text)) return false
+  return /(建单|创建工单|新建工单|帮我创建|提交工单|报修|帮忙处理一下故障|登记工单|帮我建|开个工单|立个工单)/i.test(text)
+    || (/(故障|蓝屏|无法开机|开不了机|连不上网|打印机坏了|网络中断|邮箱登不上)/i.test(text) && !/(查询|多少|统计)/i.test(text))
 }
 
-/** 需要联网搜索/抓取的外部问题（排除本工作台工单统计）。 */
+function parseAvailabilityTarget(text: string): boolean | null {
+  if (/(不可接单|暂不可接单|暂停接单|关闭接单|停止接单|不能接单)/i.test(text)) return false
+  if (/(恢复接单|打开接单|设为可接单|改为可接单|改成可接单|调整为可接单)/i.test(text)) return true
+  if (/(可接单)/i.test(text) && !/(不可|暂不)/i.test(text)) return true
+  return null
+}
+
+function matchEmployeesByNameHint(employees: EmployeeOption[], hint: string): EmployeeOption[] {
+  const normalized = hint.trim().toLocaleLowerCase()
+  if (!normalized) return []
+  const exact = employees.filter((item) => item.employeeName.trim().toLocaleLowerCase() === normalized)
+  if (exact.length) return exact
+  return employees.filter((item) => {
+    const name = item.employeeName.trim().toLocaleLowerCase()
+    return name.includes(normalized) || normalized.includes(name)
+  })
+}
+
+function extractEmployeeNameHint(text: string, employees: EmployeeOption[]): string | null {
+  const sorted = [...employees]
+    .filter((item) => item.employeeName.trim())
+    .sort((left, right) => right.employeeName.length - left.employeeName.length)
+  for (const employee of sorted) {
+    if (text.includes(employee.employeeName)) return employee.employeeName
+  }
+  const patterned = text.match(
+    /(?:把|将|给)\s*([^\s把将给的之，,。！!？?]{1,20}?)(?:的)?(?:接单状态|接单|设为|改为|改成|调整|更新|修改|暂停|恢复|打开|关闭|停止)/i,
+  )
+  return patterned?.[1]?.trim() || null
+}
+
+export function parseEmployeeAvailabilityDraft(
+  utterance: string,
+  employees: EmployeeOption[],
+): AiEmployeeAvailabilityDraft | null {
+  if (!looksLikeAvailabilityUpdate(utterance)) return null
+  const hint = extractEmployeeNameHint(utterance, employees)
+  const candidates = hint
+    ? matchEmployeesByNameHint(employees, hint)
+    : []
+  const target = parseAvailabilityTarget(utterance)
+  const primary = candidates.length === 1 ? candidates[0] : null
+  const nextAvailable = primary
+    ? (target ?? !primary.isAvailableForOrder)
+    : (target ?? true)
+
+  return {
+    employeeId: primary?.id ?? '',
+    employeeName: primary?.employeeName ?? (hint ?? ''),
+    currentAvailable: primary?.isAvailableForOrder ?? false,
+    nextAvailable,
+    rationale: primary
+      ? `拟将「${primary.employeeName}」从${primary.isAvailableForOrder ? '可接单' : '不可接单'}改为${nextAvailable ? '可接单' : '不可接单'}。`
+      : hint
+        ? `未唯一匹配员工「${hint}」，请在下方选择后再确认。`
+        : '未识别到员工姓名，请在下方选择后再确认。',
+    candidates: (candidates.length ? candidates : employees.filter((item) => item.isActive))
+      .slice(0, 30)
+      .map((item) => ({
+        id: item.id,
+        employeeName: item.employeeName,
+        isAvailableForOrder: item.isAvailableForOrder,
+      })),
+  }
+}
+
+/** 需要联网搜索/抓取的外部问题（可与工单问题并存于同一句）。 */
 export function looksLikeWebLookup(text: string): boolean {
-  if (looksLikeDataQuery(text)) return false
   if (extractHttpUrls(text, 1).length > 0) return true
-  return /(搜索|搜一下|搜下|联网|上网查|查网上|网页|官网|官方文档|最新|实时|今天|今日|昨天|新闻|天气|气温|股价|汇率|发布了|有没有更新|是什么|怎么用|如何配置|教程)/i.test(text)
+  return /(搜索|搜一下|搜下|联网|上网查|查网上|网页|官网|官方文档|最新|实时|今天|今日|昨天|新闻|天气|气温|股价|汇率|发布了|有没有更新|是什么|怎么用|如何配置|教程|笑话|写一首|翻译)/i.test(text)
+}
+
+function hasWorkbenchAsk(text: string): boolean {
+  return looksLikeDataQuery(text)
+    || /(工单|派单|员工|负载|逾期|未分派|待派单|代派单|空闲|可接单|负责人|指派给|分派给|适合|适配|SLA|运维)/i.test(text)
+}
+
+/** Non-ops ask that should not be trapped inside Dataverse-only synthesis. */
+function hasGeneralAsk(text: string): boolean {
+  if (extractHttpUrls(text, 1).length > 0) return true
+  // Keep this stricter than looksLikeWebLookup so “今天有多少工单” stays ops-only.
+  return /(天气|气温|新闻|股价|汇率|笑话|写一篇|写一首|翻译|解释一下|你是谁|讲个故事|教程|怎么用|如何配置|官网|官方文档)/i.test(text)
 }
 
 function buildSearchQuery(utterance: string): string {
@@ -132,6 +238,39 @@ function buildSearchQuery(utterance: string): string {
     .replace(/\s+/g, ' ')
     .trim()
   return Array.from(cleaned || utterance.trim()).slice(0, 128).join('')
+}
+
+async function synthesizeOpsAndGeneral(input: {
+  utterance: string
+  evidence: AssistantDataToolResult
+  failures: string[]
+  webEvidence: string
+  signal?: AbortSignal
+}): Promise<string> {
+  const failureBlock = input.failures.length
+    ? `【Dataverse 查询告警】\n${input.failures.join('\n')}`
+    : ''
+  return createDeepSeekChatCompletion({
+    signal: input.signal,
+    temperature: 0.3,
+    messages: [
+      {
+        role: 'system',
+        content: [
+          '你是通用智能助手，同时可使用工作台 Dataverse 业务证据。',
+          '用户可能在同一句里问多个子问题：按子问题分段回答。',
+          '工单/员工/派单等业务数字：只能依据下方 Dataverse 证据，不要编造。',
+          '天气/新闻/百科/写作等非工单问题：依据联网检索结果回答；若没有检索材料，请明确说无法保证实时准确性，不要假装查到了。',
+          '不要因为缺少天气数据就拒绝回答整句里的工单部分，也不要用 Dataverse 证据否定天气问题。',
+          '不要在回复末尾添加 “via …” 署名。',
+          formatAssistantDataToolForPrompt(input.evidence),
+          failureBlock,
+          input.webEvidence || '【联网检索】本次未获得可用网页材料。',
+        ].filter(Boolean).join('\n'),
+      },
+      { role: 'user', content: input.utterance },
+    ],
+  })
 }
 
 async function gatherWebEvidence(input: {
@@ -351,29 +490,6 @@ export async function parseWorkOrderDraftWithDeepSeek(
   }, departments, categories)
 }
 
-function needsNaturalLanguageInterpretation(utterance: string, live?: AssistantDataToolResult | null): boolean {
-  if (live?.needsSynthesis || (live?.parts && live.parts.length > 1)) return true
-  return /(为什么|怎么看|分析|建议|总结一下|解读|对比|趋势|适合|适配|推荐|哪些.*给)/i.test(utterance)
-}
-
-async function tryLiveDataverseAnswer(
-  utterance: string,
-  signal?: AbortSignal,
-): Promise<{
-  live: AssistantDataToolResult | null
-  errorMessage: string | null
-}> {
-  try {
-    return {
-      live: await resolveAssistantDataQuery(utterance, { signal, preferDeepSeekPlan: true }),
-      errorMessage: null,
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Dataverse 查询失败。'
-    return { live: null, errorMessage: message }
-  }
-}
-
 export async function askDeepSeekAssistant(input: {
   utterance: string
   history?: DeepSeekChatMessage[]
@@ -382,12 +498,36 @@ export async function askDeepSeekAssistant(input: {
   workOrders?: WorkOrder[]
   employees?: EmployeeOption[]
   forceCreate?: boolean
+  /** Workspace RBAC flags used by the query pipeline permission gate. */
+  permissions?: Partial<AssistantQueryPermissions>
   signal?: AbortSignal
 }): Promise<AssistantReply> {
   const utterance = input.utterance.trim()
   if (!utterance) throw new Error('请输入内容。')
 
   const snapshot = buildWorkspaceSnapshot(input.workOrders ?? [], input.employees ?? [])
+  const employees = input.employees ?? []
+  const availabilityDraft = !input.forceCreate
+    ? parseEmployeeAvailabilityDraft(utterance, employees)
+    : null
+
+  if (availabilityDraft) {
+    const canEdit = input.permissions?.canEditResources !== false
+    const permissionHint = canEdit
+      ? '确认后才会用你的账号写入 Dataverse；也可改选员工/状态或取消。'
+      : '当前角色无编辑资源权限：可预览草稿，但无法确认写入。'
+    const named = availabilityDraft.employeeId
+      ? `「${availabilityDraft.employeeName}」→ ${availabilityDraft.nextAvailable ? '可接单' : '不可接单'}`
+      : '请先选定员工与目标状态'
+    return {
+      intent: 'update_employee_availability',
+      reply: `已预建接单状态变更（${named}）。${permissionHint}`,
+      availabilityDraft,
+      source: 'local-data',
+      sourceLabel: 'local-data（接单状态预建，待确认）',
+    }
+  }
+
   const isQuery = !input.forceCreate && looksLikeDataQuery(utterance)
   const shouldCreate = input.forceCreate || (!isQuery && looksLikeCreateRequest(utterance))
 
@@ -399,62 +539,99 @@ export async function askDeepSeekAssistant(input: {
       input.signal,
     )
     const missing: string[] = []
+    if (!draft.workOrderName.trim()) missing.push('标题')
     if (!draft.serviceCategoryId) missing.push('服务类别')
     if (!draft.departmentId) missing.push('负责部门')
+    const canCreate = input.permissions?.canCreateWorkOrder !== false
+    const confidenceText = draft.confidence == null ? '未知' : `${Math.round(draft.confidence * 100)}%`
+    const permissionHint = canCreate
+      ? '确认后才会用你的账号写入 Dataverse；也可改字段或取消。'
+      : '当前角色无新建权限：可预览/修改草稿，但无法确认写入。'
     return {
       intent: 'create_work_order',
       reply: missing.length
-        ? `已生成工单草稿，但还需确认：${missing.join('、')}。请在下方卡片中补全后创建。`
-        : `已生成工单草稿（置信度 ${draft.confidence == null ? '未知' : `${Math.round(draft.confidence * 100)}%`}）。确认后可直接创建。`,
+        ? `已预建工单草稿（置信度 ${confidenceText}），还需补全：${missing.join('、')}。${permissionHint}`
+        : `已预建工单草稿（置信度 ${confidenceText}）。${permissionHint}`,
       draft,
       source: 'deepseek',
+      sourceLabel: formatAssistantQuerySourceLabel('deepseek', null, getDeepSeekModel()),
     }
   }
 
-  // Business data: DeepSeek multi-step plan → Dataverse tools → optional synthesis.
-  const { live, errorMessage: liveError } = (isQuery || /(工单|员工|负载|逾期|未分派|待派单|代派单|空闲|可接单|负责人|指派给|分派给|适合|适配)/i.test(utterance))
-    ? await tryLiveDataverseAnswer(utterance, input.signal)
-    : { live: null, errorMessage: null }
+  // Ops-data pipeline for workbench asks. General/web asks are answered separately
+  // (or merged) so weather/jokes/etc. are never trapped in Dataverse-only evidence.
+  const workbenchAsk = hasWorkbenchAsk(utterance)
+  const generalAsk = hasGeneralAsk(utterance)
+  const shouldRunPipeline = workbenchAsk
 
-  if (live && !needsNaturalLanguageInterpretation(utterance, live)) {
-    return { intent: 'query', reply: live.summary, source: 'dataverse' }
-  }
-
-  if (live && needsNaturalLanguageInterpretation(utterance, live) && hasDeepSeekApiKey()) {
-    const interpreted = stripAssistantAttribution(await createDeepSeekChatCompletion({
-      signal: input.signal,
-      temperature: 0.2,
-      messages: [
-        {
-          role: 'system',
-          content: [
-            '你是 IT 运维助手。只能基于下方 Dataverse 实时查询证据回答，不要编造未出现的数字或工单。',
-            '若用户问了多个子问题：按子问题分段回答，每段先给结论再列关键数据。',
-            '涉及“适合给谁/推荐派单”时：结合负载、可接单、部门、技能与待派单列表给出建议，并说明依据。',
-            '不要在回复末尾添加 “via …” 署名。',
-            formatAssistantDataToolForPrompt(live),
-          ].join('\n'),
+  let pipelineError: string | null = null
+  if (shouldRunPipeline) {
+    try {
+      const pipeline = await runAssistantQueryPipeline({
+        utterance,
+        signal: input.signal,
+        permissions: {
+          canQueryWorkOrders: input.permissions?.canQueryWorkOrders ?? true,
+          canQueryEmployees: input.permissions?.canQueryEmployees ?? true,
+          canViewDispatchAdvice: input.permissions?.canViewDispatchAdvice ?? true,
         },
-        { role: 'user', content: utterance },
-      ],
-    }))
-    return { intent: 'query', reply: interpreted, source: 'dataverse' }
+      })
+
+      if (pipeline.hit) {
+        if (generalAsk && hasDeepSeekApiKey() && pipeline.evidence) {
+          const gathered = await gatherWebEvidence({ utterance, signal: input.signal })
+          const mixed = stripAssistantAttribution(await synthesizeOpsAndGeneral({
+            utterance,
+            evidence: pipeline.evidence,
+            failures: pipeline.meta.failures,
+            webEvidence: gathered.evidence,
+            signal: input.signal,
+          }))
+          const usedWeb = Boolean(gathered.evidence) && (gathered.usedFetch || gathered.usedSearch)
+          return {
+            intent: 'query',
+            reply: mixed,
+            source: usedWeb ? 'dataverse+deepseek' : pipeline.source,
+            queryMeta: pipeline.meta,
+            sourceLabel: formatAssistantQuerySourceLabel(
+              pipeline.source,
+              pipeline.meta,
+              getDeepSeekModel(),
+              { withWeb: usedWeb },
+            ),
+            citations: usedWeb ? gathered.citations : undefined,
+          }
+        }
+
+        return {
+          intent: 'query',
+          reply: stripAssistantAttribution(pipeline.reply),
+          source: pipeline.source,
+          queryMeta: pipeline.meta,
+          sourceLabel: formatAssistantQuerySourceLabel(pipeline.source, pipeline.meta),
+        }
+      }
+
+      if (pipeline.meta.failures.length > 0) {
+        pipelineError = pipeline.meta.failures.join('；')
+      }
+    } catch (error) {
+      pipelineError = error instanceof Error ? error.message : 'Dataverse 查询失败。'
+    }
   }
 
-  if (live) {
-    return { intent: 'query', reply: live.summary, source: 'dataverse' }
-  }
-
-  if (isQuery || liveError) {
+  // Only fall back to local snapshot for workbench asks — never for pure weather/chat.
+  if ((workbenchAsk || pipelineError) && !generalAsk) {
     const local = answerLocallyFromSnapshot(snapshot, utterance, input.workOrders ?? [])
     if (local) {
       return {
         intent: 'query',
         source: 'local-data',
+        sourceLabel: formatAssistantQuerySourceLabel('local-data'),
         reply: [
           local,
-          liveError
-            ? `\n（Dataverse 实时查询失败，已降级为页面缓存：${liveError}）`
+          pipelineError
+            ? `\n（Dataverse 实时查询失败，已降级为页面缓存：${pipelineError}）`
             : '\n（未匹配到专用实时查询，已降级为页面已加载缓存。）',
         ].join(''),
       }
@@ -462,13 +639,14 @@ export async function askDeepSeekAssistant(input: {
   }
 
   if (!hasDeepSeekApiKey()) {
-    if (isQuery) {
+    if (workbenchAsk && !generalAsk) {
       return {
         intent: 'query',
         source: 'local-data',
+        sourceLabel: formatAssistantQuerySourceLabel('local-data'),
         reply: [
           `当前已加载工单 ${snapshot.total} 条（未配置 DeepSeek；Dataverse 专用查询未命中或失败）。`,
-          liveError ? `Dataverse：${liveError}` : '',
+          pipelineError ? `Dataverse：${pipelineError}` : '',
           `状态：${JSON.stringify(snapshot.byStatus)}`,
           `优先级：${JSON.stringify(snapshot.byPriority)}`,
           `未分派 ${snapshot.unassigned}，逾期 ${snapshot.overdue}，高+紧急 ${snapshot.highOrCritical}。`,
@@ -491,8 +669,8 @@ export async function askDeepSeekAssistant(input: {
     .slice(-8)
     .map((item) => ({ ...item, content: stripAssistantAttribution(item.content) }))
 
-  const isWorkbenchTopic = isQuery || /(工单|派单|库存|审批|员工|负载|SLA|运维|opsdesk)/i.test(utterance)
-  const wantsWeb = !isWorkbenchTopic && looksLikeWebLookup(utterance)
+  const isWorkbenchTopic = workbenchAsk && !generalAsk
+  const wantsWeb = generalAsk || (!workbenchAsk && looksLikeWebLookup(utterance))
 
   let webEvidence = ''
   let citations: AssistantCitation[] = []
@@ -536,10 +714,12 @@ export async function askDeepSeekAssistant(input: {
     signal: input.signal,
   }))
 
+  const source = usedWeb ? 'deepseek-web' as const : 'deepseek' as const
   return {
     intent: isQuery ? 'query' : 'chat',
     reply,
-    source: usedWeb ? 'deepseek-web' : 'deepseek',
+    source,
+    sourceLabel: formatAssistantQuerySourceLabel(source, null, getDeepSeekModel()),
     citations: usedWeb ? citations : undefined,
   }
 }

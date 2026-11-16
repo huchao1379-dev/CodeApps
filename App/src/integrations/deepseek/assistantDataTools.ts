@@ -13,7 +13,6 @@ import {
   type WorkOrder,
 } from '../../domains/work-orders/types/workOrder.types'
 import { createDeepSeekChatCompletion } from './deepseekClient'
-import { hasDeepSeekApiKey } from './deepseekConfig'
 
 export type AssistantDataToolName =
   | 'preset-work-orders'
@@ -582,7 +581,8 @@ export async function planAssistantDataQueryWithDeepSeek(
   return normalizeAssistantDataPlanBundle(parsePlanJson(content))
 }
 
-async function executeAssistantDataPlan(
+/** Execute one whitelist Dataverse read-only tool. */
+export async function executeAssistantDataPlan(
   plan: AssistantDataPlan,
   utterance: string,
 ): Promise<AssistantDataToolResult | null> {
@@ -613,47 +613,15 @@ async function executeAssistantDataPlan(
   }
 }
 
-function mergeToolResults(
-  parts: AssistantDataToolResult[],
-  needsSynthesis: boolean,
-): AssistantDataToolResult | null {
-  if (parts.length === 0) return null
-  if (parts.length === 1) {
-    return { ...parts[0], needsSynthesis: needsSynthesis || parts[0].needsSynthesis }
-  }
-
-  const summary = parts
-    .map((part, index) => `【${index + 1}. ${part.label}】\n${part.summary}`)
-    .join('\n\n')
-
+function emptyStep(partial: Partial<AssistantDataPlan> & Pick<AssistantDataPlan, 'intent'>): AssistantDataPlan {
   return {
-    tool: 'multi-query',
-    label: parts.map((part) => part.label).join(' + '),
-    filter: parts.map((part) => part.filter).filter(Boolean).join(' || '),
-    summary,
-    fetchedAt: new Date().toISOString(),
-    orderCount: parts.reduce((sum, part) => sum + (part.orderCount ?? 0), 0),
-    needsSynthesis: true,
-    parts,
+    intent: partial.intent,
+    preset: partial.preset ?? null,
+    assigneeName: partial.assigneeName ?? null,
+    keyword: partial.keyword ?? null,
+    employeeName: partial.employeeName ?? null,
+    wantIdle: partial.wantIdle ?? false,
   }
-}
-
-async function executeAssistantDataPlanBundle(
-  bundle: AssistantDataPlanBundle,
-  utterance: string,
-): Promise<AssistantDataToolResult | null> {
-  if (bundle.steps.length === 0) return null
-  const settled = await Promise.all(
-    bundle.steps.map(async (step) => {
-      try {
-        return await executeAssistantDataPlan(step, utterance)
-      } catch {
-        return null
-      }
-    }),
-  )
-  const parts = settled.filter((item): item is AssistantDataToolResult => Boolean(item))
-  return mergeToolResults(parts, bundle.needsSynthesis)
 }
 
 function extractFitEmployeeName(utterance: string): string | null {
@@ -662,73 +630,62 @@ function extractFitEmployeeName(utterance: string): string | null {
     || asOptionalString(utterance.match(/给\s*([A-Za-z0-9\u4e00-\u9fff·•]{2,12})\s*(?:派|接|处理)?/)?.[1] ?? null)
 }
 
-/** Regex / heuristic fallback when DeepSeek is unavailable or planning fails. */
-export async function resolveAssistantDataQueryHeuristic(
-  utterance: string,
-): Promise<AssistantDataToolResult | null> {
+/**
+ * Offline / no-Key planner: returns structured steps only.
+ * Execution always goes through the unified query pipeline.
+ */
+export function planAssistantDataQueryHeuristic(utterance: string): AssistantDataPlanBundle {
   const text = utterance.trim()
-  if (!text || !wantsWorkbenchData(text)) return null
+  if (!text || !wantsWorkbenchData(text)) return { steps: [], needsSynthesis: false }
 
   const fitName = extractFitEmployeeName(text)
   const wantsFit = /(适合|适配|推荐派|可以派给)/i.test(text)
   const wantsUnassigned = /(待派单|代派单|未分派|待分派)/i.test(text)
   const wantsAssigneeCount = Boolean(fitName) && /(工单数量|有几|多少|名下|负责|的工单)/i.test(text)
 
-  if (wantsFit || (wantsUnassigned && wantsAssigneeCount)) {
-    const parts: AssistantDataToolResult[] = []
-    if (wantsAssigneeCount && fitName) parts.push(await runAssigneeQuery(fitName))
-    if (wantsUnassigned && !wantsFit) parts.push(await runPresetQuery('unassigned-new'))
-    if (wantsFit && fitName) parts.push(await runDispatchFitQuery(fitName))
-    else if (wantsUnassigned) parts.push(await runPresetQuery('unassigned-new'))
-    const merged = mergeToolResults(parts, parts.length > 1 || wantsFit)
-    if (merged) return merged
+  const steps: AssistantDataPlan[] = []
+  if (wantsAssigneeCount && fitName) {
+    steps.push(emptyStep({ intent: 'assignee', assigneeName: fitName }))
+  }
+  if (wantsFit && fitName) {
+    steps.push(emptyStep({ intent: 'dispatch_fit', employeeName: fitName }))
+  } else if (wantsUnassigned) {
+    steps.push(emptyStep({ intent: 'preset', preset: 'unassigned-new' }))
+  }
+  if (steps.length > 0) {
+    return { steps, needsSynthesis: steps.length > 1 || wantsFit }
   }
 
   const assigneeName = extractAssigneeName(text)
-  if (assigneeName) return runAssigneeQuery(assigneeName)
-
-  const preset = matchPreset(text)
-  if (preset) return runPresetQuery(preset)
-
-  if (wantsIdleOrLoad(text)) return runEmployeeWorkloadQuery(text)
-
-  if (wantsDistribution(text)) return runDistributionQuery()
-
-  const keyword = extractWorkOrderKeyword(text)
-  if (keyword) return runSearchQuery(keyword)
-
-  if (/(查询|有哪些|列表).*(工单)|(工单).*(查询|有哪些|列表)/i.test(text)) {
-    return runDistributionQuery()
+  if (assigneeName) {
+    return { steps: [emptyStep({ intent: 'assignee', assigneeName })], needsSynthesis: false }
   }
 
-  return null
-}
+  const preset = matchPreset(text)
+  if (preset) {
+    return { steps: [emptyStep({ intent: 'preset', preset })], needsSynthesis: false }
+  }
 
-/**
- * Map a natural-language ops question to whitelist Dataverse query/queries.
- * Prefer DeepSeek multi-step planning → parallel execute; fall back to heuristics.
- */
-export async function resolveAssistantDataQuery(
-  utterance: string,
-  options?: { signal?: AbortSignal; preferDeepSeekPlan?: boolean },
-): Promise<AssistantDataToolResult | null> {
-  const text = utterance.trim()
-  if (!text) return null
-
-  const preferDeepSeek = options?.preferDeepSeekPlan !== false
-  if (preferDeepSeek && hasDeepSeekApiKey() && (wantsWorkbenchData(text) || /(多少|几个|数量|统计|查询|列表|适合|待派单|代派单)/i.test(text))) {
-    try {
-      const bundle = await planAssistantDataQueryWithDeepSeek(text, options?.signal)
-      const executed = await executeAssistantDataPlanBundle(bundle, text)
-      if (executed) return executed
-      if (wantsWorkbenchData(text)) return resolveAssistantDataQueryHeuristic(text)
-      return null
-    } catch {
-      return resolveAssistantDataQueryHeuristic(text)
+  if (wantsIdleOrLoad(text)) {
+    return {
+      steps: [emptyStep({
+        intent: 'employee_workload',
+        wantIdle: /(空闲|可接单|有空|谁可以派)/i.test(text),
+      })],
+      needsSynthesis: false,
     }
   }
 
-  return resolveAssistantDataQueryHeuristic(text)
+  if (wantsDistribution(text) || /(查询|有哪些|列表).*(工单)|(工单).*(查询|有哪些|列表)/i.test(text)) {
+    return { steps: [emptyStep({ intent: 'distribution' })], needsSynthesis: false }
+  }
+
+  const keyword = extractWorkOrderKeyword(text)
+  if (keyword) {
+    return { steps: [emptyStep({ intent: 'keyword', keyword })], needsSynthesis: false }
+  }
+
+  return { steps: [], needsSynthesis: false }
 }
 
 export function formatAssistantDataToolForPrompt(result: AssistantDataToolResult): string {

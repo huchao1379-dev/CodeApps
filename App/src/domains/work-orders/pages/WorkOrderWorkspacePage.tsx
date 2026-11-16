@@ -1076,8 +1076,16 @@ export default function WorkOrderWorkspacePage() {
     employees={state.employees ?? []}
     canCreate={can('it.create')}
     canAssign={can('it.assign')}
+    canEditResources={can('it.resources.edit')}
     createBusy={busy}
     onCreateWorkOrder={submitWorkOrder}
+    onUpdateEmployeeAvailability={(employeeId, values) => {
+      if (!ensureIt('it.resources.edit')) return Promise.resolve()
+      return runMutation(
+        async () => { await updateDataverseEmployee(employeeId, values) },
+        '员工接单状态已更新',
+      )
+    }}
     onRequestAssignment={requestDragAssignment}
   />
   </>

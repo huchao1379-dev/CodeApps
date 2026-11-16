@@ -12,8 +12,11 @@ import {
   askDeepSeekAssistant,
   recommendDispatchAssignment,
   stripAssistantAttribution,
+  type AiEmployeeAvailabilityDraft,
   type DispatchRecommendation,
 } from '../../../integrations/deepseek/deepseekAssistantService'
+import type { EmployeeResourceUpdate } from '../../../domains/work-orders/services/dataverseResourceCommands'
+import { formatAssistantQuerySourceLabel } from '../../../integrations/deepseek/assistantQueryPipeline'
 import {
   toWorkOrderInputFromAiDraft,
   type AiWorkOrderDraft,
@@ -33,7 +36,7 @@ type ChatItem = {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
-  source?: 'local-data' | 'deepseek' | 'deepseek-web' | 'dataverse'
+  source?: 'local-data' | 'deepseek' | 'deepseek-web' | 'dataverse' | 'dataverse+deepseek'
 }
 
 type DockPosition = {
@@ -48,12 +51,47 @@ type AiAssistantDockProps = {
   employees: EmployeeOption[]
   canCreate: boolean
   canAssign?: boolean
+  canEditResources?: boolean
   createBusy?: boolean
   onCreateWorkOrder: (input: WorkOrderInput) => Promise<void> | void
+  onUpdateEmployeeAvailability?: (employeeId: string, values: EmployeeResourceUpdate) => Promise<void> | void
   onRequestAssignment?: (workOrder: WorkOrder, employee: EmployeeOption) => void
 }
 
-const POSITION_STORAGE_KEY = 'opsdesk.aiAssistant.position'
+function toDateInput(value: string | null | undefined): string | null {
+  if (!value) return null
+  const datePart = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+  if (datePart) return datePart
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
+}
+
+function toEmployeeGender(value: number | null | undefined): EmployeeResourceUpdate['gender'] {
+  if (value === 326990000 || value === 326990001 || value === 326990002) return value
+  return null
+}
+
+function buildEmployeeAvailabilityUpdate(
+  employee: EmployeeOption,
+  nextAvailable: boolean,
+): EmployeeResourceUpdate {
+  return {
+    employeeName: employee.employeeName,
+    email: employee.email ?? '',
+    departmentId: employee.departmentId ?? null,
+    gender: toEmployeeGender(employee.genderValue),
+    age: employee.age ?? null,
+    hireDate: toDateInput(employee.hireDate),
+    isActive: employee.isActive,
+    isAvailableForOrder: nextAvailable,
+    maxTaskLoad: employee.maxTaskLoad ?? null,
+    skills: employee.skills ?? '',
+  }
+}
+
+/** v2: default dock corner is bottom-right; old v1 often stored top-left (24,24). */
+const POSITION_STORAGE_KEY = 'opsdesk.aiAssistant.position.v2'
+const LEGACY_POSITION_STORAGE_KEY = 'opsdesk.aiAssistant.position'
 const FAB_SIZE = 56
 const PANEL_WIDTH = 380
 const PANEL_GAP = 12
@@ -64,20 +102,40 @@ function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function isLowConfidence(fields: string[], key: string): boolean {
+  const normalized = key.toLocaleLowerCase()
+  return fields.some((field) => field.toLocaleLowerCase().includes(normalized))
+}
+
 function defaultPosition(): DockPosition {
-  if (typeof window === 'undefined') return { left: 24, top: 24 }
+  if (typeof window === 'undefined') {
+    // Prefer bottom-right once the viewport is known; avoid legacy top-left (24,24).
+    return { left: 10000, top: 10000 }
+  }
   return {
     left: Math.max(12, window.innerWidth - FAB_SIZE - SHELL_INSET),
     top: Math.max(12, window.innerHeight - FAB_SIZE - SHELL_INSET),
   }
 }
 
+function isLegacyTopLeftPosition(position: DockPosition): boolean {
+  return position.left <= 32 && position.top <= 32
+}
+
 function readStoredPosition(): DockPosition | null {
   try {
     const raw = sessionStorage.getItem(POSITION_STORAGE_KEY)
-    if (!raw) return null
+    if (!raw) {
+      // Drop legacy top-left defaults so the icon re-homes to bottom-right.
+      sessionStorage.removeItem(LEGACY_POSITION_STORAGE_KEY)
+      return null
+    }
     const parsed = JSON.parse(raw) as DockPosition
     if (typeof parsed.left !== 'number' || typeof parsed.top !== 'number') return null
+    if (isLegacyTopLeftPosition(parsed)) {
+      sessionStorage.removeItem(POSITION_STORAGE_KEY)
+      return null
+    }
     return parsed
   } catch {
     return null
@@ -129,8 +187,10 @@ export function AiAssistantDock({
   employees,
   canCreate,
   canAssign = false,
+  canEditResources = false,
   createBusy = false,
   onCreateWorkOrder,
+  onUpdateEmployeeAvailability,
   onRequestAssignment,
 }: AiAssistantDockProps) {
   const [open, setOpen] = useState(false)
@@ -141,11 +201,12 @@ export function AiAssistantDock({
   const [dropActive, setDropActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<AiWorkOrderDraft | null>(null)
+  const [availabilityDraft, setAvailabilityDraft] = useState<AiEmployeeAvailabilityDraft | null>(null)
   const [dispatchAdvice, setDispatchAdvice] = useState<DispatchRecommendation | null>(null)
   const [messages, setMessages] = useState<ChatItem[]>([{
     id: 'welcome',
     role: 'system',
-    content: '我是 DeepSeek 助手：查工单/空闲/逾期等会走 Dataverse 实时查询；外网问题可 Search/Fetch。也可从派发看板把待分派工单拖到这里问派给谁。按住标题栏或 AI 按钮可拖动。',
+    content: '我是 DeepSeek 助手：业务查询走 Dataverse 只读；建单/派发/改接单状态不会直接写入，只会预建草稿，你可改字段后确认或取消。也可拖入待分派工单问派给谁。按住标题栏或 AI 按钮可拖动。',
   }])
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [baseUrlInput, setBaseUrlInput] = useState(DEEPSEEK_DEFAULT_BASE_URL)
@@ -159,6 +220,7 @@ export function AiAssistantDock({
   const listRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const positionRef = useRef(position)
+  const didHomeCornerRef = useRef(false)
   const dragRef = useRef<{
     pointerId: number
     offsetX: number
@@ -177,6 +239,16 @@ export function AiAssistantDock({
     positionRef.current = position
   }, [position])
 
+  // First paint may run before layout is stable; ensure initial home is bottom-right.
+  useEffect(() => {
+    if (didHomeCornerRef.current) return
+    didHomeCornerRef.current = true
+    const stored = readStoredPosition()
+    const next = clampPosition(stored ?? defaultPosition())
+    positionRef.current = next
+    setPosition(next)
+  }, [])
+
   useEffect(() => {
     if (!open) return
     const snapshot = getDeepSeekConfigSnapshot()
@@ -190,7 +262,7 @@ export function AiAssistantDock({
   useEffect(() => {
     if (!open) return
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
-  }, [open, messages, draft, error, busy])
+  }, [open, messages, draft, availabilityDraft, error, busy])
 
   useEffect(() => {
     const onResize = () => setPosition((current) => clampPosition(current))
@@ -249,6 +321,15 @@ export function AiAssistantDock({
     && draft.serviceCategoryId
     && draft.departmentId
     && canCreate
+    && !createBusy
+    && !busy,
+  )
+
+  const canSubmitAvailability = Boolean(
+    availabilityDraft
+    && availabilityDraft.employeeId
+    && canEditResources
+    && onUpdateEmployeeAvailability
     && !createBusy
     && !busy,
   )
@@ -330,16 +411,18 @@ export function AiAssistantDock({
         workOrders,
         employees,
         forceCreate,
+        permissions: {
+          canQueryWorkOrders: true,
+          canQueryEmployees: true,
+          canViewDispatchAdvice: canAssign,
+          canCreateWorkOrder: canCreate,
+          canEditResources,
+        },
         signal: controller.signal,
       })
 
-      const sourceLabel = result.source === 'local-data'
-        ? 'local-data（页面缓存降级）'
-        : result.source === 'dataverse'
-          ? 'dataverse（实时 $filter）'
-          : result.source === 'deepseek-web'
-            ? `${getDeepSeekModel()} + web`
-            : getDeepSeekModel()
+      const sourceLabel = result.sourceLabel
+        ?? formatAssistantQuerySourceLabel(result.source, result.queryMeta, getDeepSeekModel())
       const citationBlock = result.citations?.length
         ? `\n\n来源：\n${result.citations.slice(0, 5).map((item, index) => `${index + 1}. ${item.title}\n${item.url}`).join('\n')}`
         : ''
@@ -349,7 +432,18 @@ export function AiAssistantDock({
         source: result.source,
         content: `${stripAssistantAttribution(result.reply)}${citationBlock}\n\n— via ${sourceLabel}`,
       }])
-      setDraft(result.intent === 'create_work_order' ? (result.draft ?? null) : null)
+      if (result.intent === 'create_work_order' && result.draft) {
+        setDispatchAdvice(null)
+        setAvailabilityDraft(null)
+        setDraft(result.draft)
+      } else if (result.intent === 'update_employee_availability' && result.availabilityDraft) {
+        setDispatchAdvice(null)
+        setDraft(null)
+        setAvailabilityDraft(result.availabilityDraft)
+      } else {
+        setDraft(null)
+        setAvailabilityDraft(null)
+      }
     } catch (caught) {
       if (controller.signal.aborted) return
       const message = caught instanceof Error ? caught.message : '助手调用失败。'
@@ -369,12 +463,67 @@ export function AiAssistantDock({
       setMessages((current) => [...current, {
         id: uid(),
         role: 'system',
-        content: `工单「${draft.workOrderName}」创建请求已提交。`,
+        content: `已确认并提交创建工单「${draft.workOrderName}」（由你的账号写入 Dataverse）。`,
       }])
       setDraft(null)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '创建工单失败。')
     }
+  }
+
+  const cancelDraft = () => {
+    if (!draft) return
+    const title = draft.workOrderName.trim() || '未命名'
+    setDraft(null)
+    setMessages((current) => [...current, {
+      id: uid(),
+      role: 'system',
+      content: `已取消工单草稿「${title}」，未写入 Dataverse。`,
+    }])
+  }
+
+  const cancelAvailabilityDraft = () => {
+    if (!availabilityDraft) return
+    const name = availabilityDraft.employeeName.trim() || '未选定员工'
+    setAvailabilityDraft(null)
+    setMessages((current) => [...current, {
+      id: uid(),
+      role: 'system',
+      content: `已取消「${name}」接单状态变更，未写入 Dataverse。`,
+    }])
+  }
+
+  const confirmAvailabilityDraft = async () => {
+    if (!availabilityDraft || !canSubmitAvailability || !onUpdateEmployeeAvailability) return
+    const employee = employees.find((item) => item.id === availabilityDraft.employeeId)
+    if (!employee) {
+      setError('员工已不存在或未加载，请刷新后重试。')
+      return
+    }
+    try {
+      await onUpdateEmployeeAvailability(
+        employee.id,
+        buildEmployeeAvailabilityUpdate(employee, availabilityDraft.nextAvailable),
+      )
+      setMessages((current) => [...current, {
+        id: uid(),
+        role: 'system',
+        content: `已确认将「${employee.employeeName}」设为${availabilityDraft.nextAvailable ? '可接单' : '不可接单'}（由你的账号写入 Dataverse）。`,
+      }])
+      setAvailabilityDraft(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '更新接单状态失败。')
+    }
+  }
+
+  const cancelDispatchAdvice = () => {
+    if (!dispatchAdvice) return
+    setDispatchAdvice(null)
+    setMessages((current) => [...current, {
+      id: uid(),
+      role: 'system',
+      content: '已取消派发建议，未发起派发。',
+    }])
   }
 
   const runDispatchAdvice = async (workOrderId: string) => {
@@ -386,6 +535,7 @@ export function AiAssistantDock({
     setOpen(true)
     setForceCreate(false)
     setDraft(null)
+    setAvailabilityDraft(null)
     setDispatchAdvice(null)
     setBusy(true)
     setError(null)
@@ -465,10 +615,11 @@ export function AiAssistantDock({
       return
     }
     onRequestAssignment(workOrder, employee)
+    setDispatchAdvice(null)
     setMessages((current) => [...current, {
       id: uid(),
       role: 'system',
-      content: `已发起派给「${employee.employeeName}」的派发流程（仍走系统原有派发/审批，不是 AI 直接改库）。`,
+      content: `已确认派给「${employee.employeeName}」，已发起系统派发/审批流程（非 AI 直接写入 Dataverse）。`,
     }])
   }
 
@@ -568,13 +719,14 @@ export function AiAssistantDock({
           <div className="ai-dock-draft-title">派发建议
             <span>{dispatchAdvice.source === 'deepseek' ? 'DeepSeek + 负载' : '本地负载规则'}</span>
           </div>
+          <p className="ai-dock-draft-rationale">AI 不会直接写入 Dataverse；点选后走原有派发/审批流程，也可取消。</p>
           {dispatchAdvice.primary && <button
             className="button button-primary"
             type="button"
             disabled={!canAssign || !onRequestAssignment || busy || createBusy}
             title={!canAssign ? '当前角色无派发权限' : undefined}
             onClick={() => assignFromAdvice(dispatchAdvice.primary!)}
-          >建议派给 {dispatchAdvice.primary.employeeName}</button>}
+          >确认派给 {dispatchAdvice.primary.employeeName}</button>}
           {dispatchAdvice.alternatives.length > 0 && <div className="ai-dock-assign-alts">
             {dispatchAdvice.alternatives.map((employee) => (
               <button
@@ -583,25 +735,108 @@ export function AiAssistantDock({
                 type="button"
                 disabled={!canAssign || !onRequestAssignment || busy || createBusy}
                 onClick={() => assignFromAdvice(employee)}
-              >备选：{employee.employeeName}</button>
+              >改派：{employee.employeeName}</button>
             ))}
           </div>}
-          <p className="ai-dock-draft-rationale">AI 只给建议；确认后仍走原有派发/审批流程。</p>
+          <div className="ai-dock-draft-actions">
+            <button
+              className="button button-quiet"
+              type="button"
+              disabled={busy || createBusy}
+              onClick={cancelDispatchAdvice}
+            >取消</button>
+          </div>
+        </div>}
+
+        {availabilityDraft && <div className="ai-dock-draft">
+          <div className="ai-dock-draft-title">接单状态预建
+            <span>{availabilityDraft.nextAvailable ? '→ 可接单' : '→ 不可接单'}</span>
+          </div>
+          <p className="ai-dock-draft-rationale">
+            {availabilityDraft.rationale} 尚未写入 Dataverse。可改选员工或目标状态，确认后才会更新。
+          </p>
+          <label>员工
+            <select
+              value={availabilityDraft.employeeId}
+              disabled={busy || createBusy}
+              onChange={(event) => {
+                const selected = employees.find((item) => item.id === event.target.value)
+                  ?? availabilityDraft.candidates.find((item) => item.id === event.target.value)
+                setAvailabilityDraft((current) => current ? {
+                  ...current,
+                  employeeId: event.target.value,
+                  employeeName: selected?.employeeName ?? current.employeeName,
+                  currentAvailable: selected?.isAvailableForOrder ?? current.currentAvailable,
+                } : current)
+              }}
+            >
+              <option value="">请选择员工</option>
+              {(availabilityDraft.candidates.length
+                ? availabilityDraft.candidates
+                : employees.filter((item) => item.isActive).map((item) => ({
+                  id: item.id,
+                  employeeName: item.employeeName,
+                  isAvailableForOrder: item.isAvailableForOrder,
+                }))
+              ).map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.employeeName}（{employee.isAvailableForOrder ? '当前可接单' : '当前不可接单'}）
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>目标接单状态
+            <select
+              value={availabilityDraft.nextAvailable ? '1' : '0'}
+              disabled={busy || createBusy}
+              onChange={(event) => setAvailabilityDraft((current) => current ? {
+                ...current,
+                nextAvailable: event.target.value === '1',
+              } : current)}
+            >
+              <option value="1">可接单</option>
+              <option value="0">不可接单</option>
+            </select>
+          </label>
+          {!canEditResources && <p className="ai-dock-draft-warn" role="status">当前角色无编辑资源权限，可预览草稿，但无法确认写入。</p>}
+          {canEditResources && !availabilityDraft.employeeId && (
+            <p className="ai-dock-draft-warn" role="status">请先选择员工后再确认。</p>
+          )}
+          <div className="ai-dock-draft-actions">
+            <button
+              className="button button-quiet"
+              type="button"
+              disabled={busy || createBusy}
+              onClick={cancelAvailabilityDraft}
+            >取消</button>
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={!canSubmitAvailability}
+              title={!canEditResources ? '当前角色无编辑资源权限' : undefined}
+              onClick={() => { void confirmAvailabilityDraft() }}
+            >{createBusy ? '更新中…' : '确认更新'}</button>
+          </div>
         </div>}
 
         {draft && <div className="ai-dock-draft">
-          <div className="ai-dock-draft-title">工单草稿
+          <div className="ai-dock-draft-title">工单预建草稿
             <span>{draft.confidence == null ? '置信度未知' : `${Math.round(draft.confidence * 100)}%`}</span>
           </div>
-          {draft.rationale && <p className="ai-dock-draft-rationale">{draft.rationale}</p>}
-          <label>标题
+          <p className="ai-dock-draft-rationale">
+            {draft.rationale ? `${draft.rationale} ` : ''}
+            尚未写入 Dataverse。可直接改字段，确认后才会创建；取消则丢弃。
+          </p>
+          <label className={isLowConfidence(draft.lowConfidenceFields, 'workordername') || isLowConfidence(draft.lowConfidenceFields, 'title') ? 'field-low-confidence' : undefined}>
+            标题
             <input
               value={draft.workOrderName}
               disabled={busy || createBusy}
               onChange={(event) => setDraft((current) => current ? { ...current, workOrderName: event.target.value } : current)}
             />
           </label>
-          <label>描述
+          <label className={isLowConfidence(draft.lowConfidenceFields, 'issuedescription') || isLowConfidence(draft.lowConfidenceFields, 'description') ? 'field-low-confidence' : undefined}>
+            描述
             <input
               value={draft.issueDescription}
               maxLength={100}
@@ -610,7 +845,8 @@ export function AiAssistantDock({
             />
           </label>
           <div className="ai-dock-draft-row">
-            <label>服务类别
+            <label className={isLowConfidence(draft.lowConfidenceFields, 'category') ? 'field-low-confidence' : undefined}>
+              服务类别
               <select
                 value={draft.serviceCategoryId}
                 disabled={busy || createBusy}
@@ -634,7 +870,8 @@ export function AiAssistantDock({
                 ))}
               </select>
             </label>
-            <label>部门
+            <label className={isLowConfidence(draft.lowConfidenceFields, 'department') ? 'field-low-confidence' : undefined}>
+              部门
               <select
                 value={draft.departmentId}
                 disabled={busy || createBusy}
@@ -647,7 +884,8 @@ export function AiAssistantDock({
               </select>
             </label>
           </div>
-          <label>优先级
+          <label className={isLowConfidence(draft.lowConfidenceFields, 'priority') ? 'field-low-confidence' : undefined}>
+            优先级
             <select
               value={draft.priority}
               disabled={busy || createBusy}
@@ -661,12 +899,25 @@ export function AiAssistantDock({
               ))}
             </select>
           </label>
-          <button
-            className="button button-primary"
-            type="button"
-            disabled={!canSubmitDraft}
-            onClick={() => { void createFromDraft() }}
-          >{createBusy ? '创建中…' : '确认创建工单'}</button>
+          {!canCreate && <p className="ai-dock-draft-warn" role="status">当前角色无新建工单权限，可预览/修改草稿，但无法确认写入。</p>}
+          {canCreate && (!draft.serviceCategoryId || !draft.departmentId || !draft.workOrderName.trim()) && (
+            <p className="ai-dock-draft-warn" role="status">请补全标题、服务类别和部门后再确认创建。</p>
+          )}
+          <div className="ai-dock-draft-actions">
+            <button
+              className="button button-quiet"
+              type="button"
+              disabled={busy || createBusy}
+              onClick={cancelDraft}
+            >取消</button>
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={!canSubmitDraft}
+              title={!canCreate ? '当前角色无新建工单权限' : undefined}
+              onClick={() => { void createFromDraft() }}
+            >{createBusy ? '创建中…' : '确认创建'}</button>
+          </div>
         </div>}
       </div>
 
@@ -676,7 +927,7 @@ export function AiAssistantDock({
         <textarea
           rows={2}
           maxLength={500}
-          placeholder={forceCreate ? '描述故障，例如：财务部笔记本蓝屏…' : '问我任何问题，或切换建单模式…'}
+          placeholder={forceCreate ? '描述故障，例如：财务部笔记本蓝屏…' : '请输入您的问题'}
           value={input}
           disabled={busy || createBusy}
           onChange={(event) => setInput(event.target.value)}

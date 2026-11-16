@@ -26,23 +26,21 @@ export {
   type DeepSeekSearchResult,
 } from './deepseekToolsClient'
 export {
-  extractAssigneeName,
-  formatAssistantDataToolForPrompt,
-  planAssistantDataQueryWithDeepSeek,
-  resolveAssistantDataQuery,
-  resolveAssistantDataQueryHeuristic,
-  type AssistantDataPlan,
-  type AssistantDataPlanBundle,
-  type AssistantDataPlanIntent,
-  type AssistantDataToolName,
-  type AssistantDataToolResult,
-} from './assistantDataTools'
+  formatAssistantQuerySourceLabel,
+  runAssistantQueryPipeline,
+  type AssistantQueryMeta,
+  type AssistantQueryPermissions,
+  type AssistantQueryPipelineResult,
+  type AssistantQuerySource,
+} from './assistantQueryPipeline'
 export {
   askDeepSeekAssistant,
-  looksLikeWebLookup,
+  looksLikeAvailabilityUpdate,
+  parseEmployeeAvailabilityDraft,
   parseWorkOrderDraftWithDeepSeek,
   recommendDispatchAssignment,
   stripAssistantAttribution,
+  type AiEmployeeAvailabilityDraft,
   type AssistantCitation,
   type AssistantIntent,
   type AssistantReply,
